@@ -2,12 +2,12 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Categories on Kyra&#39;s Note</title>
-    <link>http://circleous.github.io/categories/</link>
+    <link>https://circleous.github.io/categories/</link>
     <description>Recent content in Categories on Kyra&#39;s Note</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-id</language>
     
-	<atom:link href="http://circleous.github.io/categories/index.xml" rel="self" type="application/rss+xml" />
+	<atom:link href="https://circleous.github.io/categories/index.xml" rel="self" type="application/rss+xml" />
     
     
   </channel>
