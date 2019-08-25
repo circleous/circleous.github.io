@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en-id">
+    <head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<title>Cerita Di Balik 2 Tahun Menjadi Ngadimin HackToday &middot; Kyra&#39;s Note</title>
+
+		
+  		<link rel="stylesheet" href="/css/style.css">
+		<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+		
+		<link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+		<link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+
+		
+		<link href="" rel="alternate" type="application/rss+xml" title="Kyra&#39;s Note" />
+	</head>
+
+    <body>
+        		<nav class="nav">
+			<div class="nav-container">
+				<a href="/">
+					<h2 class="nav-title">Kyra&#39;s Note</h2>
+				</a>
+				<ul>
+    <li><a href="/about">About</a></li>
+    <li><a href="/">Posts</a></li>
+</ul>
+			</div>
+		</nav>
+
+        
+
+<main>
+	<div class="post">
+		<div class="post-info">
+    <span>Written by</span>
+        circleous
+        <br>
+        <span>on&nbsp;</span><time datetime="2019-08-25 10:11:55 &#43;0700 WIB">August 25, 2019</time>
+</div>
+		<h1 class="post-title">Cerita Di Balik 2 Tahun Menjadi Ngadimin HackToday</h1>
+<div class="post-line"></div>
+
+		
+
+		<p>Ini akan jadi beberapa seri <em>writeup</em> untuk HackToday dan untuk bagian pertama, tulisan ini tidak berfokus pada editorial dari saya sebagai problem setter, tapi lebih ke sisi saya menjadi <em>ngadmin</em>, hehe. Flash back ke masa menjelang akhir-akhir tahun pertama saya kuliah di IPB, saya baru mengenal CTF di kalangan komunitas Indonesia saat itu dan langsung untuk menjadi problem setter acara ini (HackToday). Panik? <em>Sangad</em>. Jangankan untuk tahu docker dan dengan segala istilah <em>container</em>-blah, saya sendiri baru mulai <em>terjerumus</em> ke dunia CTF awal tahun ajaran kuliah.</p>
+
+<p>Saat itu, kami memiliki beberapa orang problem setter, tapi bagian &ldquo;<em>sysadmin</em>&rdquo; lebih terfokus pada saya dan bang Alfan. &ldquo;<em>sysadmin</em>&rdquo;, dengan tanda kutip, ya.. mau gimana lagi? docker saja tidak tahu, mana mungkin saya paham cara <em>scaling</em> dan lainnya. Kami berdua masih mengandalkan <em>setup</em> dari tahun 2017, tapi bedanya, tidak ada yang tahu cara untuk membuat segalanya menjadi lebih efisien. Kurang lebih ini struktur dari setiap challenge yang perlu di <em>deploy</em> ke server,</p>
+
+<pre><code>.
+├── Dockerfile
+├── challenge
+└── flag
+</code></pre>
+
+<p>wait&hellip; gak ada compose file? yep, kalian tidak salah lihat. Kami pun tidak tahu bagaimana caranya memakai compose file. Ini adalah kasus kecil dimana problem kategori <code>pwn</code> yang hanya memerlukan bare minimal linux dengan glibc untuk binary dapat berjalan. Contoh bisa lihat di bawah, diambil dari soal <code>faile</code>, <code>HackToday 2017</code>.</p>
+
+<script type="application/javascript" src="https://gist.github.com/zeroload/a51a68ed504ae63c533299d8e49797ca.js?file=Dockerfile"></script>
+
+
+<p>Terus gimana yang <code>web</code>? Ini lebih ribet lagi karena perlu mengamankan beberapa set permission dengan benar, setup db dan cgi (php-fpm untuk nginx), dsb. Kalau dibandingkan, compose file jauh lebih mudah untuk setup yang seperti ini dan mengikuti filosofi docker sendiri, <em>single process per container</em>. Kemungkinan error-nya memang <em>gede</em>, tapi tetap melakukan ini karena tidak punya pilihan lain. <em>&ldquo;Let it run on foreground, and keep our fingers crossed&rdquo;</em>. Ternyata, error masih tetep ada. Gak kurang-kurang, kejadiannya di soal <code>web</code> saat lomba sedang berlangsung sehingga soal perlu di <em>takedown</em> beberapa jam untuk maintenis, wkwkw. Sebenernya, ga cuma di web sih, kalau ingat, kami di awal salah memasukkan beberapa binary dan web pada service yang berjalan sehingga waktu perlombaan perlu ditambah dua jam. Intinya, sangat <em>prone to error</em>.</p>
+
+<p>Di sisi server, karena kami pun tidak ada yang paham masalah hardware di server, kami hanya menghamburkan uang dengan membeli 2 server yang &ldquo;lumayan&rdquo; <em>and again, keep our fingers crossed</em>. Alhasil, CTFd yang kurang responsif walau tak separah kualifikasi compfest beberapa minggu lalu.</p>
+
+<p><img src="https://i.imgur.com/eFfmdb3.jpg" alt="take my money" /><em>Shut up and Take my money!</em></p>
+
+<p>Moral of the story, jangan diikuti gan.</p>
+
+<p>Pada tahun kedua ini, walaupun kelihatannya <em>fine-fine</em> aja, sebenarnya tidak banyak yang berubah dari tahun pertama selain sudah mulai mengimplementasikan <code>docker-compose</code> dan load balancer di beberapa <em>service</em> penting. Tidak banyak berubah karena dari sisi keuangan sendiri gak berbeda jauh dari tahun lalu (hanya berkurang 50%), seharusnya bisa jauh lebih efisien dengan <a href="https://cloud.google.com/kubernetes-engine/">GKE</a>, tapi dengan human resource yang hanya satu orang di bagian sysadmin, saya sendiri, belajar hal baru sambil menyiapkan soal dan berbagai drama internal, lebih baik saya tetap memakai model server monolitik. 2 server untuk menjalakan service dan 1 server pribadi saya untuk load balancer. Detail untuk setup sendiri akan saya bahas pada <em>post</em> selanjustnya, walaupun saya sendiri tidak menganjurkan untuk mengikuti setup ini yang lumayan <em>costly</em>.</p>
+
+<p>Load balancer soal yang digunakan adalah nginx. CTFd di-<em>scale</em> menjadi 4 dari awal dengan load balancer nginx pada main server. Dari semua &ldquo;<em>dongeng</em>&rdquo; ini, cloudflare juga lumayan bagus karena kami sempat mengalami downtime saat akses <code>/challenges</code> dan <code>/scoreboard</code> pada menit-menit awal, namun setelah beberapa saat kemudian website kembali stabil dengan kondisi bandwith mulai masuk ke cloudflare cached bandwith. Notable juga untuk tools docker-compose karena untuk one man team di sysadmin, hampir semua lebih <em>do-able</em> untuk otomasi setup dan <em>maintenance</em>. Intinya, semua ini lebih &ldquo;<em>worth the time and money</em>&rdquo; karena memang niatnya untuk berbagi ilmu dan self improvement karena berusaha untuk menjadi <em>ngadimin</em> yang layak walaupun ga kesampaian juga.</p>
+
+<p>Terimakasih buat peserta yang sudah mau dijadikan sebagai bahan percobaan kami sebagai &ldquo;<em>sysadmin</em>&rdquo;. #enjoyaman</p>
+
+<p><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRoMrBJac-HniQMUazvAWpynl-YwQo1ZGSabj-mjjuck3sO0FFHig" alt="pamit" /><em>Saya pamit :&rdquo;</em></p>
+
+
+		
+	</div>
+
+	<div class="pagination">
+		<a href="/a-long-rant-and-fbctf-2019-kpets/" class="left arrow">&#8592;</a>
+		<a href="/admin-side-of-hacktoday-2019/" class="right arrow">&#8594;</a>
+
+		<a href="#" class="top">Top</a>
+	</div>
+</main>
+
+
+        		<footer>
+			<span>
+			&copy; <time datetime="2019-08-25 12:08:18.035536066 &#43;0700 WIB m=&#43;0.089395281">2019</time> . Made with <a href='https://gohugo.io'>Hugo</a> using the <a href='https://github.com/EmielH/tale-hugo/'>Tale</a> theme.
+			</span>
+		</footer>
+
+    </body>
+</html>

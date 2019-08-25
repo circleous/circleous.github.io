@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en-id">
+    <head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<title>Ngadimin dari HackToday 2019 &middot; Kyra&#39;s Note</title>
+
+		
+  		<link rel="stylesheet" href="/css/style.css">
+		<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+		
+		<link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+		<link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+
+		
+		<link href="" rel="alternate" type="application/rss+xml" title="Kyra&#39;s Note" />
+	</head>
+
+    <body>
+        		<nav class="nav">
+			<div class="nav-container">
+				<a href="/">
+					<h2 class="nav-title">Kyra&#39;s Note</h2>
+				</a>
+				<ul>
+    <li><a href="/about">About</a></li>
+    <li><a href="/">Posts</a></li>
+</ul>
+			</div>
+		</nav>
+
+        
+
+<main>
+	<div class="post">
+		<div class="post-info">
+    <span>Written by</span>
+        circleous
+        <br>
+        <span>on&nbsp;</span><time datetime="2019-08-25 11:17:51 &#43;0700 WIB">August 25, 2019</time>
+</div>
+		<h1 class="post-title">Ngadimin dari HackToday 2019</h1>
+<div class="post-line"></div>
+
+		
+
+		
+
+<p><img src="/img/hacktoday-logo.png" alt="logo" /><em>codepwnda ini bukan nama baru CSI, bukan juga organisasi atau pun komunitas baru.</em></p>
+
+<p>Tulisan ini adalah bagian kedua dari seri <em>writeup</em> HackToday, masih membahas dari sisi <em>Ngadimin</em> HackToday 2019.</p>
+
+<h1 id="kualifikasi">Kualifikasi</h1>
+
+<p>Sebelumnya, saya mau klarifikasi lebih dahulu xD. Akses platform kami memang stabil, tapi kalau dibandingkan dengan jumlah tim yang terdaftar pada compfest 12, sangat beda jauh. Iya, tim yang terdaftar kali ini hanya sekitar ~50 tim. Tidak heran, untuk server yang mungkin bisa mengakomodir ~500 orang dan realita hanya diakses oleh ~150 orang, bisa dikatakan, ini perbandingan yang kurang relevan xD.</p>
+
+<h2 id="statistics">statistics</h2>
+
+<p><img src="/img/hacktoday-stats.png" alt="logo" /><em>top sekret unreleased challs</em></p>
+
+<p>52 team dengan terdaftar dengan 1 soal, <em>sanity check</em>, mencapai 100% solved percentage. Gak heran, karena ini termasuk free flag. ¯\_(ツ)_/¯</p>
+
+<p><img src="/img/hacktoday-rw-submission.png" alt="submission" /><em>597 wrong submission. :(</em></p>
+
+<p>Ada <em>597 wrong submission</em> selama CTF berlangsung dan lebih dari 50% wrong submission berasal dari soal kategori Forensik. Ini cukup menyedihkan sih, mengingat kami dari probset sendiri lebih fokus kepada soal crypto, pwn, rev, dan web. sad.</p>
+
+<p><img src="https://images-ext-1.discordapp.net/external/-D-TbFsk1aWQu9l5xgYlopUpc8GTrtHadXFRrilgQhA/https/pbs.twimg.com/media/D7uZZvsWsAEXHAm.png" alt="guess god" /><em>Sebenernya ini bukti nyata dari forensic - guess god, lol.</em></p>
+
+<p><img src="/img/hacktoday-cloudflare.png" alt="cloudflare" /><em>cloudflare</em></p>
+
+<h2 id="the-setup">the setup</h2>
+
+<p><strong>warn</strong>, masih banyak <a href="https://medium.com/@iamalsaher/the-admin-side-of-evlzctf-2019-ccb77d45c74d">tutorial</a> <a href="https://www.youtube.com/watch?v=kUmaKvxdfvg">diluar sana</a> menggunakan cara yang lebih efisien.</p>
+
+<p>Lanjutan penjelasan pada <em>post</em> sebelumnya, setelah server masuk ke pemilihan platform. Pemilihan platform ini sebenernya agak sulit, tapi pada akhirnya CTFd masih tetap digunakan. Ke-&ldquo;panik&rdquo;-an ini berawal dari kompetisi lain seminggu sebelum HackToday dimulai mengalami downtime yang cukup lama, dan sebenernya udah menjadi <em>known issues</em> di <a href="https://github.com/CTFd/CTFd/issues/1012">CTFd #1012</a>. Database server masih di satu server yang sama tapi berbeda dari instance docker CTFd (Saya ga pakai Google Cloud SQL atau service semacamnya). Ini supaya CTFd dapat di &ldquo;scale&rdquo; dengan mudah karena sebelum jalanin CTFd perlu set <code>DATABASE_URL</code> ke db server yang sudah dibuat sebelumnya dan SECRET_KEY dari file <code>.ctfd_secret_key</code> konstan untuk semua <em>instance</em> CTFd yang akan dijalankan. Info lebih lanjut hubungi <a href="https://github.com/CTFd/CTFd/wiki/Advanced-Deployment">+6221-9696-9293</a> (nvm, just click the link lol). Scaling ini perlu dibarengin sama load balancer, saya sendiri pakai nginx untuk setup load balancer, contoh konfigurasinya,</p>
+
+<pre><code>upstream ctfd {
+    least_conn;
+    server backend1:8000;
+    server backend2:8001;
+    server backend3:8002;
+    server backend4:8003;
+}
+
+server {
+    listen 50000;
+
+    access_log /var/log/nginx/ctfd/access.log;
+    error_log /var/log/nginx/ctfd/error.log;
+
+    proxy_set_header HOST $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    location / {
+        proxy_pass http://ctfd;
+    }
+}
+</code></pre>
+
+<p>Advanced configuration bisa dilihat dari <a href="http://nginx.org/en/docs/http/load_balancing.html">dokumentasi nginx</a> atau blog dari <a href="https://www.digitalocean.com/community/tutorials/understanding-nginx-http-proxying-load-balancing-buffering-and-caching">digitalocean</a>.</p>
+
+<p>Untuk service soal-soal karena perlu lewat tcp, cloudflare perlu di set jadi DNS only.
+<img src="/img/hacktoday-cf-dns-only.png" alt="dns only" /><em>dns only, kalau masih ingat ini dari not.codepwnda.id</em>
+jika perlu, scale juga soal-soal yang dirasa cukup unstable untuk masalah koneksi. btw, nginx juga bisa dipakai untuk <a href="https://docs.nginx.com/nginx/admin-guide/load-balancer/tcp-udp-load-balancer/">load balancer TCP/UDP</a>.</p>
+
+<h1 id="final">Final</h1>
+
+<p>Para tim finalis bisa dilihat di instagram IT TODAY, <a href="https://www.instagram.com/p/B1JZsmhg625/">link</a>. Pada Final kali ini kami tidak mempersipakan banyak soal forensik dan misc dengan harapan mengurangi <em>wrong submisson</em>, tapi realitanya tidak. sad.
+<img src="/img/hacktoday-rw-submission-final.png" alt="sad af" />
+<em>sad af</em></p>
+
+<p><em>The culprit?</em> satu soal crypto, <em>ezhash</em>, dimana peserta harus mem-bruteforce correct flag, tapi siapa sangka,</p>
+
+<pre><code class="language-python">def hash(x):
+    x ^= x &gt;&gt; 16
+    x *= 0xd76aa478
+    x &amp;= 0xffffffff
+    x ^= x &gt;&gt; 13
+    x *= 0xe8c7b756
+    x &amp;= 0xffffffff
+    x ^= x &gt;&gt; 14
+    return x
+</code></pre>
+
+<p>hanya karena konstanta yang dipakai bukan bilangan prima, hash collision mudah banget dicapai.</p>
+
+<p><img src="/img/hacktoday-nosystemissafe.png" alt="NO SYSTEM IS SAFE" /><em>thanks to siapa pun itu yang sudah membuat tamplate depes ini xD</em>
+btw, saya juga membuat soal untuk nge-troll (foto di atas), dimana peserta memang harus benar-benar guess where the flag dimana ini seharusnya menjadi free flag for all, tapi sampai beberapa jam terakhir hanya memiliki sedikit solve. sad.</p>
+
+<p>Overall setup keseluruhan tidak jauh berbeda dengan kualifikasi, yang berbeda hanya kami tidak menggunakan load balancer sama sekali.</p>
+
+<h2 id="saya-pamit">saya pamit?</h2>
+
+<p>Ini mungkin akan menjadi seri terakhir saya untuk menjadi bagian board of ngadimin HackToday mengingat tahun depan saya harus mulai Kuliah Kerja <del>Nangid</del>Nyata. sad.</p>
+
+
+		
+	</div>
+
+	<div class="pagination">
+		<a href="/cerita-di-balik-2-tahun-menjadi-ngadimin-hacktoday/" class="left arrow">&#8592;</a>
+
+		<a href="#" class="top">Top</a>
+	</div>
+</main>
+
+
+        		<footer>
+			<span>
+			&copy; <time datetime="2019-08-25 12:08:18.032168302 &#43;0700 WIB m=&#43;0.086027503">2019</time> . Made with <a href='https://gohugo.io'>Hugo</a> using the <a href='https://github.com/EmielH/tale-hugo/'>Tale</a> theme.
+			</span>
+		</footer>
+
+    </body>
+</html>
