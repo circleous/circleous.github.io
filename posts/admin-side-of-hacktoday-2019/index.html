@@ -114,18 +114,15 @@ jika perlu, scale juga soal-soal yang dirasa cukup unstable untuk masalah koneks
 <em>sad af</em></p>
 
 <p><em>The culprit?</em> satu soal crypto, <em>ezhash</em>, dimana peserta harus mem-bruteforce correct flag, tapi siapa sangka,</p>
-
-<pre><code class="language-python">def hash(x):
-    x ^= x &gt;&gt; 16
-    x *= 0xd76aa478
-    x &amp;= 0xffffffff
-    x ^= x &gt;&gt; 13
-    x *= 0xe8c7b756
-    x &amp;= 0xffffffff
-    x ^= x &gt;&gt; 14
-    return x
-</code></pre>
-
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python"><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">hash</span>(x):
+    x <span style="color:#f92672">^=</span> x <span style="color:#f92672">&gt;&gt;</span> <span style="color:#ae81ff">16</span>
+    x <span style="color:#f92672">*=</span> <span style="color:#ae81ff">0xd76aa478</span>
+    x <span style="color:#f92672">&amp;=</span> <span style="color:#ae81ff">0xffffffff</span>
+    x <span style="color:#f92672">^=</span> x <span style="color:#f92672">&gt;&gt;</span> <span style="color:#ae81ff">13</span>
+    x <span style="color:#f92672">*=</span> <span style="color:#ae81ff">0xe8c7b756</span>
+    x <span style="color:#f92672">&amp;=</span> <span style="color:#ae81ff">0xffffffff</span>
+    x <span style="color:#f92672">^=</span> x <span style="color:#f92672">&gt;&gt;</span> <span style="color:#ae81ff">14</span>
+    <span style="color:#66d9ef">return</span> x</code></pre></div>
 <p>hanya karena konstanta yang dipakai bukan bilangan prima, hash collision mudah banget dicapai.</p>
 
 <p><img src="/img/hacktoday-nosystemissafe.png" alt="NO SYSTEM IS SAFE" /><em>thanks to siapa pun itu yang sudah membuat tamplate depes ini xD</em>
@@ -152,7 +149,7 @@ btw, saya juga membuat soal untuk nge-troll (foto di atas), dimana peserta meman
 
         		<footer>
 			<span>
-			&copy; <time datetime="2019-08-25 14:36:12.336423556 &#43;0700 WIB m=&#43;0.055494025">2019</time> . Made with <a href='https://gohugo.io'>Hugo</a> using the <a href='https://github.com/EmielH/tale-hugo/'>Tale</a> theme.
+			&copy; <time datetime="2019-08-27 23:00:33.898068981 &#43;0700 WIB m=&#43;0.078593273">2019</time> . Made with <a href='https://gohugo.io'>Hugo</a> using the <a href='https://github.com/EmielH/tale-hugo/'>Tale</a> theme.
 			</span>
 		</footer>
 

