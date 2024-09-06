@@ -2,7 +2,7 @@
 title: "HackToday 2019 Quals - pwn"
 description: "Editorial untul soal-soal yang saya buat untuk HackToday Quals CTF 2019"
 pubDate: "August 26 2019"
-tags: ["ctf-writeup", "pwn"]
+tags: ["ctf-writeup", "editorial", "pwn"]
 ---
 
 Ini akan menjadi seri ke-tiga pada seri _writeup_ HackToday 2019, kali ini saya akan menulis beberapa editorial untuk soal-soal pwn pada kualifikasi HackToday 2019.
