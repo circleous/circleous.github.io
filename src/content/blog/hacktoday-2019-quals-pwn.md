@@ -208,7 +208,7 @@ if __name__ == '__main__':
 
 Awalnya soal terakhir pwn untuk kualifikasi ini menyangkut hal JIT type confusion pada WebKit, mengikuti LiveOverflow hype pada seriesnya di YouTube, pwning WebKit. Setelah diukur waktu pengerjaannya, 6~7 jam pengerjaan untuk entry level CTF itu tidak memungkinkan. Akhirnya, mengikuti style speedrun DEF CON, saya membuat soal out-of-bound dari salah satu mini js engine yang ada. Yang saya pilih adalah [QuickJS dari Fabrice Bellard](https://bellard.org/quickjs/) karena duktape sudah lumayan banyak digunakan untuk beberapa CTF sebelumnya (DEFCON, midnight, etc.). patchset yang diberikan, `0001-QuickJS-enable-OOB.patch`,
 
-```patch
+```diff
 diff --git quickjs.c quickjs.c
 index 9606455..c81b450 100644
 --- quickjs.c

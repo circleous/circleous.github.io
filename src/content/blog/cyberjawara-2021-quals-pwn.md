@@ -41,8 +41,8 @@ void read_buf(char *prompt, char *buf, size_t sz) {
   }
 }
 ...
-	store.size = read_uint("size = ");
-	read_buf("storage name = ", store.name, sizeof(store.name) - 1);
+ store.size = read_uint("size = ");
+ read_buf("storage name = ", store.name, sizeof(store.name) - 1);
 ...
 ```
 
@@ -53,12 +53,12 @@ store.size = read_uint("size = "); // 0x0A0000...
 // ...
 read_buf("storage name = ", store.name, sizeof(store.name) - 1);
 // ...... di read_buf
-	  fgets(buf, sz, stdin); // store.name = "\x00"
+   fgets(buf, sz, stdin); // store.name = "\x00"
 
-	  int pos = strlen(buf) - 1; // strlen(store.name) = 0, pos = -1
-	  if (buf[pos] == '\n') { // store.name[-1] == 0x0a / HSB dari store.size
-	    buf[pos] = 0; // store.size = 0x0000...
-	  }
+   int pos = strlen(buf) - 1; // strlen(store.name) = 0, pos = -1
+   if (buf[pos] == '\n') { // store.name[-1] == 0x0a / HSB dari store.size
+     buf[pos] = 0; // store.size = 0x0000...
+   }
 // ......
 ```
 
@@ -68,7 +68,7 @@ Karena sudah bisa OOB (size gede banget, alokasi buffer kecil banget), tinggal l
 
 Beberapa pekan lalu saya membuat soal backdoored qemu system escape untuk HackToday tahun ini, namun saya tarik kembali karena ternyata masih banyak masalah saat coba untuk dideploy. Ada niatan untuk release kembali soalnya untuk CJ tahun ini, tapi akhirnya saya buat lagi yang kurang lebih sama temanya. Soal ini banyak mengambil ide dari \*CTF 2021 - Favourite Architecture ([https://ctftime.org/task/14585](https://ctftime.org/task/14585)). Bedanya hanya pada restriksi syscall yang bisa dilakukan.
 
-```patch
+```diff
 diff --git a/linux-user/syscall.c b/linux-user/syscall.c
 index ccd3892b2..419c147a6 100644
 --- a/linux-user/syscall.c
@@ -107,5 +107,5 @@ Bug banyak karena intensinya juga dibuat untuk sebagai entry challenge di linux 
 
 v8 type confussion, TBD. Berhubung saya masih menjalankan bounty (100k GOPAY atau e-wallet lain) untuk soal ini sampai Final Cyber Jawara 2021 (1 Desember 2021), editorial dari saya akan dirilis setelah Final CJ 2021 selesai. Rule cukup simple,
 
-1.  ~~Kirim flag ke saya (`circleous#0587`) lewat Discord~~. Bounty taken by Linuz
-2.  Tidak curang dan tidak berbagi flag, saya akan menanyakan beberapa hal untuk konfirmasi
+1. ~~Kirim flag ke saya (`circleous#0587`) lewat Discord~~. Bounty taken by Linuz
+2. Tidak curang dan tidak berbagi flag, saya akan menanyakan beberapa hal untuk konfirmasi
