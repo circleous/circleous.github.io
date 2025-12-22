@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Wasm on circleous</title><link>https://circleous.github.io/tags/wasm/</link><description>Recent content in Wasm on circleous</description><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 19 Aug 2024 00:00:00 +0700</lastBuildDate><atom:link href="https://circleous.github.io/tags/wasm/index.xml" rel="self" type="application/rss+xml"/><item><title>Decompiling WASM</title><link>https://circleous.github.io/posts/decompiling-wasm/</link><pubDate>Mon, 19 Aug 2024 00:00:00 +0700</pubDate><guid>https://circleous.github.io/posts/decompiling-wasm/</guid><description>&lt;h2 id="the-problem"&gt;The Problem&lt;/h2&gt;
+&lt;p&gt;Have you ever looked at WASM decompiled code using &lt;code&gt;wasm2c&lt;/code&gt; from wabt toolkit and thought, &amp;ldquo;there has to be a better way&amp;rdquo;?
+While WASM&amp;rsquo;s instruction set keeps things simple (except for those vectors and floating-point numbers!),
+the stack machine design can sometimes lead to less-than-optimal code after decompilation.&lt;/p&gt;
+&lt;p&gt;Take a look at this code snippet: (taken from revsite2 challenge LITCTF 2024)&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"&gt;&lt;code class="language-c" data-lang="c"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#bb9af7"&gt;static&lt;/span&gt; &lt;span style="color:#41a6b5"&gt;void&lt;/span&gt; &lt;span style="color:#7aa2f7"&gt;w2c_visit_ad&lt;/span&gt;(Z_revsite2_instance_t&lt;span style="color:#9ece6a;font-weight:bold"&gt;*&lt;/span&gt; instance) {
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#414868;font-style:italic"&gt;// [SNIP]
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; FUNC_PROLOGUE;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#414868;font-style:italic"&gt;/* push rbp */&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#414868;font-style:italic"&gt;/* mov rbp, rsp */&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; u32 w2c_i0, w2c_i1, w2c_i2;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; u64 w2c_j0, w2c_j1;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; instance&lt;span style="color:#9ece6a;font-weight:bold"&gt;-&amp;gt;&lt;/span&gt;w2c_g0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_l0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_i0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#414868;font-style:italic"&gt;/* sub rsp, N */&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; &lt;span style="color:#e0af68"&gt;2048u&lt;/span&gt;;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_l1 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_i0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_l0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i1 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_l1;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;-=&lt;/span&gt; w2c_i1;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_l2 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_i0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_l2;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; instance&lt;span style="color:#9ece6a;font-weight:bold"&gt;-&amp;gt;&lt;/span&gt;w2c_g0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_i0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#414868;font-style:italic"&gt;// [SNIP]
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;This might look familiar if you&amp;rsquo;ve dabbled in C/C++ before. It&amp;rsquo;s just a standard function prologue, but thanks to WASM&amp;rsquo;s design,
+it ends up a bit bloated. What could potentially be a single instruction gets broken down into multiple steps.
+It&amp;rsquo;s readable, sure, but not exactly optimized.&lt;/p&gt;</description></item></channel></rss>

