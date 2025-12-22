@@ -1,0 +1,11 @@
+baseURL = 'https://circleous.github.io/'
+languageCode = 'en-us'
+title = 'circleous'
+theme = 'perfectfuckingblog'
+
+[markup.goldmark.renderer]
+unsafe = true
+
+[markup.highlight]
+style = 'tokyonight-night'
+

@@ -1,0 +1,29 @@
+baseURL = 'https://example.org/'
+languageCode = 'en-US'
+title = 'Perfect Fucking Blog'
+copyright = 'CC0 1.0 Universal'
+
+[params]
+  description = "A perfect motherfucking Hugo theme with no JavaScript"
+  author = "Author Name"
+
+[menus]
+  [[menus.main]]
+    name = 'Home'
+    pageRef = '/'
+    weight = 10
+
+  [[menus.main]]
+    name = 'Posts'
+    pageRef = '/posts'
+    weight = 20
+
+  [[menus.main]]
+    name = 'Tags'
+    pageRef = '/tags'
+    weight = 30
+
+[module]
+  [module.hugoVersion]
+    extended = false
+    min = '0.146.0'

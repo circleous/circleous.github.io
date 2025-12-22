@@ -1,0 +1,8 @@
+{{ define "main" }}
+  <h1>{{ .Title }}</h1>
+  <ul>
+    {{ range .Pages.ByDate.Reverse }}
+      <li><kbd>{{ .Date.Format "2006/01/02" }}</kbd> — <a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+    {{ end }}
+  </ul>
+{{ end }}

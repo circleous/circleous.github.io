@@ -1,0 +1,20 @@
+{{ define "main" }}
+  <article>
+    {{ .Content }}
+  </article>
+  
+  {{ range first 3 (site.RegularPages.ByDate.Reverse) }}
+    <article>
+      <h2><a href="{{ .RelPermalink }}">{{ .LinkTitle }}</a></h2>
+      <time datetime="{{ .Date | time.Format "2006-01-02T15:04:05-07:00" }}">
+        {{ .Date | time.Format ":date_long" }}
+      </time>
+      {{ .Summary }}
+      {{ if .Truncated }}
+        <p><a href="{{ .RelPermalink }}">Read more →</a></p>
+      {{ end }}
+    </article>
+  {{ end }}
+  
+  <p><a href="/posts/">View all posts →</a></p>
+{{ end }}
