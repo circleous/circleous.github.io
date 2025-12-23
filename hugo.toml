@@ -1,4 +1,4 @@
-baseURL = 'https://circleous.github.io/'
+baseURL = 'https://blog.circleo.us/'
 languageCode = 'en-us'
 title = 'circleous'
 theme = 'perfectfuckingblog'
