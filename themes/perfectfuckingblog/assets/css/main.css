@@ -44,3 +44,10 @@ h3 {
     color: #8e96f0;
   }
 }
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1em 0;
+}
